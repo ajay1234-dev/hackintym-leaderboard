@@ -3,18 +3,14 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Injection, Bounty, ActivityLog, Card } from '@/types';
+import { Injection, Bounty } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, Zap, Target, Clock, RotateCcw } from 'lucide-react';
-import { useGlobalEffects } from './GlobalEffectsContext';
+import { Activity, Zap, Target } from 'lucide-react';
 
 export default function EventsSidebar() {
   const [injections, setInjections] = useState<Injection[]>([]);
   const [bounties, setBounties] = useState<Bounty[]>([]);
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
-  const { showCardCelebration } = useGlobalEffects();
 
   useEffect(() => {
     // Listen to Active Injections
@@ -30,27 +26,10 @@ export default function EventsSidebar() {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Bounty[];
       setBounties(data.filter(b => b.status === 'active'));
     });
-
-    // Listen to Activity Logs
-    const qLogs = query(collection(db, 'activityLogs'), orderBy('timestamp', 'desc'), limit(5));
-    const unsubLogs = onSnapshot(qLogs, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ActivityLog[];
-      setLogs(data);
-      setLoading(false); // Consider loading complete once logs respond (usually the largest)
-    });
-
-    // Listen to Cards for replay functionality
-    const qCards = query(collection(db, 'cards'));
-    const unsubCards = onSnapshot(qCards, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Card[];
-      setCards(data);
-    });
-
+      setLoading(false);
     return () => {
       unsubInjections();
       unsubBounties();
-      unsubLogs();
-      unsubCards();
     };
   }, []);
 
@@ -137,156 +116,6 @@ export default function EventsSidebar() {
                 <p className="text-[10px] text-purple-200/70 leading-relaxed mt-1">{bounty.description}</p>
               </motion.div>
             ))}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Activity Feed Section */}
-      <div className="glass-panel border border-zinc-800 rounded-2xl flex-1 flex flex-col overflow-hidden min-h-[250px] sm:min-h-[300px]">
-        <div className="p-3 sm:p-5 border-b border-zinc-800 flex items-center gap-2 shrink-0 bg-zinc-900/50">
-          <Activity className="w-3 h-3 sm:w-4 sm:h-4 text-[#39ff14]" />
-          <h2 className="text-xs sm:text-sm font-black uppercase tracking-widest text-zinc-300">
-            Activity Feed
-          </h2>
-        </div>
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-2 sm:space-y-3 relative">
-          {logs.length === 0 && (
-            <div className="text-center py-8 text-xs font-mono text-zinc-600 uppercase tracking-widest italic">
-              Awaiting Activity...
-            </div>
-          )}
-          <AnimatePresence initial={false}>
-            {logs.map((log) => {
-              const timeString = new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second:'2-digit' });
-              
-              // Enhanced dynamic event messages
-              let logMessage = (log.message || log.action || '').replace(/ \(Manual:.*?\)/, '');
-              let cardInfo: Card | null = null;
-              
-              if (log.actionType === 'score') {
-                  const pointsStr = logMessage.match(/([+-]\d+)/)?.[0] || '';
-                  logMessage = `${log.teamName || 'A team'} gained ${pointsStr} points`;
-              } else if (log.actionType === 'card') {
-                  const cardName = logMessage.match(/acquired (.+) card/)?.[1] || 'a card';
-                  const foundCard = cards.find(c => c.name.toLowerCase() === cardName.toLowerCase());
-                  cardInfo = foundCard || null;
-                  
-                  if (cardInfo) {
-                    const rarityPrefix = cardInfo.type === 'LEGENDARY' ? 'LEGENDARY' : cardInfo.type === 'RARE' ? 'RARE' : '';
-                    logMessage = `${log.teamName || 'A team'} unlocked ${rarityPrefix} ${cardName.toUpperCase()}`;
-                  } else {
-                    logMessage = `${log.teamName || 'A team'} unlocked ${cardName.toUpperCase()}`;
-                  }
-              } else if (log.actionType === 'bounty') {
-                  logMessage = `${log.teamName || 'A team'} earned RARE BOOST from bounty`;
-              } else if (log.actionType === 'injection') {
-                  logMessage = `${log.teamName || 'A team'} received LEGENDARY TIME WARP`;
-              }
-              
-              // Enhanced color coding with rarity support
-              let actionColor = 'text-zinc-300';
-              let iconColor = 'text-zinc-500';
-              let bgHighlight = 'bg-transparent';
-              
-              if (log.actionType === 'score') {
-                actionColor = 'text-[#39ff14]';
-                iconColor = 'text-[var(--color-neon-green)]';
-                bgHighlight = 'bg-[#39ff14]/5';
-              } else if (log.actionType === 'card') {
-                if (cardInfo) {
-                  if (cardInfo.type === 'LEGENDARY') {
-                    actionColor = 'text-yellow-400';
-                    iconColor = 'text-yellow-500';
-                    bgHighlight = 'bg-yellow-500/10';
-                  } else if (cardInfo.type === 'RARE') {
-                    actionColor = 'text-purple-400';
-                    iconColor = 'text-purple-500';
-                    bgHighlight = 'bg-purple-500/5';
-                  } else {
-                    actionColor = 'text-cyan-400';
-                    iconColor = 'text-cyan-500';
-                    bgHighlight = 'bg-cyan-500/5';
-                  }
-                } else {
-                  actionColor = 'text-blue-400';
-                  iconColor = 'text-blue-500';
-                  bgHighlight = 'bg-blue-500/5';
-                }
-              } else if (log.actionType === 'injection') {
-                actionColor = 'text-red-400';
-                iconColor = 'text-red-500';
-                bgHighlight = 'bg-red-500/5';
-              } else if (log.actionType === 'bounty') {
-                actionColor = 'text-purple-400';
-                iconColor = 'text-purple-500';
-                bgHighlight = 'bg-purple-500/5';
-              } else if (!log.actionType) {
-                // Legacy fallback heuristic
-                 if (logMessage.toLowerCase().includes('executed') || logMessage.toLowerCase().includes('deleted')) {
-                  actionColor = 'text-red-400'; iconColor = 'text-red-500';
-                } else if (logMessage.toLowerCase().includes('granted') || logMessage.toLowerCase().includes('added')) {
-                  actionColor = 'text-blue-400'; iconColor = 'text-blue-500';
-                } else if (logMessage.toLowerCase().includes('updated')) {
-                  actionColor = 'text-[#39ff14]'; iconColor = 'text-[var(--color-neon-green)]';
-                }
-              }
-
-              return (
-                <motion.div
-                  key={log.id}
-                  layout
-                  initial={{ opacity: 0, height: 0, x: -20, filter: 'brightness(2)' }}
-                  animate={{ opacity: 1, height: 'auto', x: 0, filter: 'brightness(1)' }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                  className={`flex gap-2 items-start p-2 rounded-lg ${bgHighlight} transition-colors border border-transparent hover:border-zinc-800/50`}
-                >
-                  <div className={`mt-0.5 flex-shrink-0 ${iconColor}`}>
-                    <Clock size={12} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                       <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900/80 px-1.5 rounded border border-zinc-800">{timeString}</span>
-                       {log.teamName && (
-                         <span className={`text-[9px] uppercase tracking-widest font-bold ${actionColor} bg-zinc-800/50 border border-zinc-700/50 px-1.5 py-0.5 rounded-sm`}>
-                           {log.teamName}
-                         </span>
-                       )}
-                    </div>
-                    <span className={`text-[11px] md:text-xs text-zinc-300 leading-snug block drop-shadow-sm`}>
-                      {logMessage}
-                    </span>
-                    
-                    {/* Replay button for card unlock events */}
-                    {log.actionType === 'card' && cardInfo && (
-                      <motion.button
-                        onClick={() => {
-                          if (cardInfo && log.teamName) {
-                            showCardCelebration(log.teamName, cardInfo);
-                          }
-                        }}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className={`
-                          mt-2 flex items-center gap-1 text-[10px] font-mono
-                          px-2 py-1 rounded border transition-colors
-                          ${cardInfo.type === 'LEGENDARY' 
-                            ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20' 
-                            : cardInfo.type === 'RARE'
-                            ? 'text-purple-400 bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20'
-                            : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20'
-                          }
-                        `}
-                      >
-                        <RotateCcw size={10} />
-                        Replay
-                      </motion.button>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
           </AnimatePresence>
         </div>
       </div>

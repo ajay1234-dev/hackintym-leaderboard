@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/types';
 import { CARD_ICONS } from '@/lib/icons';
@@ -17,6 +17,22 @@ interface CardCelebrationPopupProps {
 }
 
 export function CardCelebrationPopup({ celebration, isVisible }: CardCelebrationPopupProps) {
+  useEffect(() => {
+    const enableAudio = () => {
+      (window as any).audioEnabled = true;
+    };
+    window.addEventListener("click", enableAudio, { once: true });
+    return () => window.removeEventListener("click", enableAudio);
+  }, []);
+
+  useEffect(() => {
+    if (isVisible && (window as any).audioEnabled) {
+      const audio = new Audio("/sounds/unlock.mp3");
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    }
+  }, [isVisible]);
+
   if (!celebration || !isVisible) return null;
 
   const { teamName, card } = celebration;
@@ -86,7 +102,13 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
   return (
     <AnimatePresence>
       {isVisible && (
-        <div className="fixed top-2 sm:top-4 left-1/2 transform -translate-x-1/2 z-9999 pointer-events-none px-2 sm:px-4">
+        <motion.div
+           key={celebration.id}
+           initial={{ opacity: 0, scale: 0.8, y: -30 }}
+           animate={{ opacity: 1, scale: 1, y: 0 }}
+           exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.4 } }}
+           className="fixed top-2 sm:top-4 left-1/2 transform -translate-x-1/2 z-[9999] pointer-events-none px-2 sm:px-4"
+        >
           {/* Background Glow Effect */}
           <GlowEffect rarity={card.type} />
           
@@ -223,7 +245,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
               />
             )}
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

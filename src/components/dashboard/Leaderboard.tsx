@@ -122,8 +122,8 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
       {/* Absolute floating text has been offloaded to GlobalEffectsLayer */}
 
       {/* Rank */}
-      <div className="col-span-2 flex justify-center">
-        <span className={`text-lg sm:text-xl md:text-2xl font-black ${rankClass}`}>
+      <div className="col-span-2 lg:col-span-1 flex justify-center">
+        <span className={`text-base sm:text-xl md:text-2xl font-black ${rankClass}`}>
           #{index + 1}
         </span>
       </div>
@@ -147,7 +147,7 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
       </div>
 
       {/* Power Cards */}
-      <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-3 flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-visible text-left pl-1 sm:pl-2">
+      <div className="col-span-3 sm:col-span-4 md:col-span-4 lg:col-span-3 flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-visible text-left pl-1 sm:pl-2">
           {(() => {
             const owned = team.cardsOwned || [];
             const used = team.cardsUsed || [];
@@ -160,7 +160,7 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
               <>
                  {allCards.map(c => renderCard(c.id, c.isUsed, c.index))}
                  {[...Array(Math.max(0, 3 - allCards.length))].map((_, i) => (
-                   <div key={`empty-${i}`} className="w-7 h-7 sm:w-8.5 sm:h-8.5 md:w-9.5 md:h-9.5 shrink-0 rounded-md border border-dashed border-zinc-700/40 bg-zinc-900/30 flex items-center justify-center">
+                   <div key={`empty-${i}`} className="w-[24px] h-[24px] sm:w-[34px] sm:h-[34px] md:w-[38px] md:h-[38px] shrink-0 rounded-md border border-dashed border-zinc-700/40 bg-zinc-900/30 flex items-center justify-center">
                      <span className="text-zinc-600 font-bold opacity-30 text-[10px] sm:text-xs">+</span>
                    </div>
                  ))}
@@ -187,7 +187,7 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
         >
           <AnimatedScore 
             value={team.totalScore}
-            className="text-2xl md:text-3xl font-mono font-bold block relative z-10 [text-shadow:0_0_8px_rgba(57,255,20,0.5)] text-white"
+            className="text-lg sm:text-2xl md:text-3xl font-mono font-bold block relative z-10 [text-shadow:0_0_8px_rgba(57,255,20,0.5)] text-white"
           />
         </motion.div>
       </div>
@@ -291,10 +291,7 @@ export default function Leaderboard() {
     return (
       <motion.div 
          key={`${isUsed ? 'used' : 'owned'}-${card.id}-${i}`} 
-         initial={isFirstRender.current ? false : (!isUsed ? { scale: 2, opacity: 0, y: -30 } : false)}
-         animate={{ scale: 1, opacity: 1, y: 0 }}
-         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-         className={`relative flex items-center justify-center w-[34px] h-[34px] md:w-[38px] md:h-[38px] shrink-0 rounded-md border shadow-sm cursor-help transition-all duration-300 ${usedStyle} hover:scale-[1.08] hover:z-50 hover:shadow-[0_0_15px_currentColor]`}
+         className={`relative flex items-center justify-center w-[24px] h-[24px] sm:w-[34px] sm:h-[34px] md:w-[38px] md:h-[38px] shrink-0 rounded-md border shadow-sm cursor-help transition-all duration-300 ${usedStyle} hover:scale-[1.08] hover:z-50 hover:shadow-[0_0_15px_currentColor]`}
          onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             showTooltip({
@@ -309,7 +306,7 @@ export default function Leaderboard() {
          }}
          onMouseLeave={hideTooltip}
       >
-        <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-md" />
+        <IconComponent className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 drop-shadow-md" />
       </motion.div>
     );
   };
@@ -326,12 +323,12 @@ export default function Leaderboard() {
 
       {/* Table Header */}
       <div className="grid grid-cols-12 gap-1 sm:gap-2 md:gap-4 p-2 sm:p-4 border-b border-zinc-800 bg-zinc-900/80 text-[9px] sm:text-[10px] md:text-xs font-bold uppercase tracking-wider text-zinc-400">
-        <div className="col-span-2 text-center">#</div>
+        <div className="col-span-2 lg:col-span-1 text-center">#</div>
         <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 text-left pl-1 sm:pl-2">Team</div>
         <div className="hidden lg:block col-span-1 text-center">R1</div>
         <div className="hidden lg:block col-span-1 text-center">R2</div>
         <div className="hidden lg:block col-span-1 text-center">R3</div>
-        <div className="col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-3 text-left pl-1 sm:pl-2">Cards</div>
+        <div className="col-span-3 sm:col-span-4 md:col-span-4 lg:col-span-3 text-left pl-1 sm:pl-2">Cards</div>
         <div className="hidden md:block col-span-1 text-center">Bonus</div>
         <div className="col-span-2 text-right pr-1 sm:pr-2">Score</div>
       </div>

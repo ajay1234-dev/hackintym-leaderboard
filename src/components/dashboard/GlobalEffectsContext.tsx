@@ -91,8 +91,8 @@ export const GlobalEffectsProvider = ({ children }: { children: ReactNode }) => 
       setIsCelebrationPlaying(true);
       setCelebrationQueue(curr => curr.slice(1));
       
-      // Auto-dismiss after 2.5-3 seconds based on rarity
-      const duration = next.card.type === 'LEGENDARY' ? 3000 : next.card.type === 'RARE' ? 2750 : 2500;
+      // Auto-dismiss after 3.5 seconds unconditionally 
+      const duration = 3500;
       
       const timer = setTimeout(() => {
         setActiveCelebration(null);
