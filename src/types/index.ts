@@ -22,7 +22,7 @@ export interface ActivityLog {
 export interface Card {
   id: string;
   name: string;
-  type: 'common' | 'rare' | 'legendary';
+  type: 'COMMON' | 'RARE' | 'LEGENDARY';
   description: string;
   effect: string;
   icon: string;
@@ -36,6 +36,7 @@ export interface Injection {
   status: 'active' | 'resolved';
   type?: 'global' | 'selective';
   targetTeamId?: string;
+  rewardCardId?: string;
 }
 
 export interface Bounty {
@@ -44,4 +45,5 @@ export interface Bounty {
   description: string;
   rewardPoints: number;
   status: 'active' | 'completed';
+  rewardCardId?: string;
 }

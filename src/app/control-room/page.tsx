@@ -26,17 +26,17 @@ export default function ControlRoom() {
   // Deck Builder State
   const [isAddingCard, setIsAddingCard] = useState(false);
   const [newCard, setNewCard] = useState({
-    name: '', type: 'common', description: '', effect: '', icon: 'Zap'
+    name: '', type: 'COMMON', description: '', effect: '', icon: 'Zap'
   });
 
   // Assign state mapped by team id
   const [selectedCards, setSelectedCards] = useState<Record<string, string>>({});
 
   // Events State
-  const [newInjection, setNewInjection] = useState<{title: string, description: string, points: number, type: 'global' | 'selective', targetTeamId: string}>({ title: '', description: '', points: 0, type: 'global', targetTeamId: '' });
+  const [newInjection, setNewInjection] = useState<{title: string, description: string, points: number, type: 'global' | 'selective', targetTeamId: string, rewardCardId: string}>({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '' });
   const [isAddingInjection, setIsAddingInjection] = useState(false);
 
-  const [newBounty, setNewBounty] = useState({ title: '', description: '', rewardPoints: 0 });
+  const [newBounty, setNewBounty] = useState({ title: '', description: '', rewardPoints: 0, rewardCardId: '' });
   const [isAddingBounty, setIsAddingBounty] = useState(false);
   
   // Bounty Completion Modal State
@@ -71,7 +71,10 @@ export default function ControlRoom() {
 
     const qCards = query(collection(db, 'cards'));
     const unsubscribeCards = onSnapshot(qCards, (snapshot) => {
-      const cardsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Card[];
+      const cardsData = snapshot.docs.map(doc => {
+         const data = doc.data();
+         return { id: doc.id, ...data, type: (data.type || 'COMMON').toUpperCase() } as Card;
+      });
       setCards(cardsData);
     });
 
@@ -198,7 +201,7 @@ export default function ControlRoom() {
       await addDoc(collection(db, 'cards'), newCard);
       await logActivity('system', `Created card: ${newCard.name}`);
       showToast(`Forged card: ${newCard.icon} ${newCard.name}`, 'success');
-      setNewCard({ name: '', type: 'common', description: '', effect: '', icon: 'Zap' });
+      setNewCard({ name: '', type: 'COMMON', description: '', effect: '', icon: 'Zap' });
     } finally { setIsAddingCard(false); }
   };
 
@@ -234,6 +237,28 @@ export default function ControlRoom() {
     showToast(`${teamName} executed ${cardInfo?.name}`, 'success');
   };
 
+  const resolveRewardCard = (team: Team, cardIdStr?: string) => {
+    let finalCardId: string | null = null;
+    if (cardIdStr === 'random') {
+       if (cards.length > 0) {
+          finalCardId = cards[Math.floor(Math.random() * cards.length)].id;
+       }
+    } else if (cardIdStr && cardIdStr !== 'none') {
+       finalCardId = cardIdStr;
+    }
+    if (!finalCardId) return null;
+
+    const owned = team.cardsOwned || [];
+    if (owned.includes(finalCardId)) return null; // Reject duplicate
+
+    let newOwned = [...owned];
+    if (newOwned.length >= 4) {
+       newOwned.shift(); // FIFO logic for limit of 4
+    }
+    newOwned.push(finalCardId);
+    return { finalCardId, newOwned };
+  };
+
   // Events Logic
   const handleAddInjection = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,16 +285,32 @@ export default function ControlRoom() {
          // Apply to selective team
          const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
          if (targetTeam) {
+            const updates: Partial<Team> = {};
+            let actionMsg = `Injection applied: ${newInjection.title} → ${targetTeam.teamName} (${newInjection.points > 0 ? '+' : ''}${newInjection.points} pts`;
+
             if (newInjection.points !== 0) {
-               const currentScore = Number(targetTeam.bonusPoints) || 0;
-               await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + newInjection.points });
+               updates.bonusPoints = (Number(targetTeam.bonusPoints) || 0) + newInjection.points;
             }
-            await logActivity('injection', `Injection applied: ${newInjection.title} → ${targetTeam.teamName} (${newInjection.points > 0 ? '+' : ''}${newInjection.points} points)`, targetTeam.teamName, newInjection.points);
+
+            if (newInjection.rewardCardId && newInjection.rewardCardId !== 'none') {
+               const reward = resolveRewardCard(targetTeam, newInjection.rewardCardId);
+               if (reward) {
+                  updates.cardsOwned = reward.newOwned;
+                  const grantedCard = cards.find(c => c.id === reward.finalCardId);
+                  actionMsg += grantedCard ? `, +${grantedCard.name} Card` : '';
+               }
+            }
+            actionMsg += ')';
+
+            if (Object.keys(updates).length > 0) {
+               await updateDoc(doc(db, 'teams', targetTeam.id), updates);
+            }
+            await logActivity('injection', actionMsg, targetTeam.teamName, newInjection.points);
             showToast(`Injection targeted: ${targetTeam.teamName} (${newInjection.points > 0 ? '+' : ''}${newInjection.points} pts)`, 'success');
          }
       }
       
-      setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '' });
+      setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '' });
     } finally { setIsAddingInjection(false); }
   };
 
@@ -288,7 +329,7 @@ export default function ControlRoom() {
       await addDoc(collection(db, 'bounties'), { ...newBounty, status: 'active' });
       await logActivity('system', `Issued bounty: ${newBounty.title}`);
       showToast(`Bounty issued: ${newBounty.title}`, 'success');
-      setNewBounty({ title: '', description: '', rewardPoints: 0 });
+      setNewBounty({ title: '', description: '', rewardPoints: 0, rewardCardId: '' });
     } finally { setIsAddingBounty(false); }
   };
 
@@ -299,16 +340,34 @@ export default function ControlRoom() {
     if (!team) return;
 
     try {
-       // 1. Add rewardPoints to selected team
-       const currentBonus = Number(team.bonusPoints) || 0;
-       await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentBonus + completingBounty.rewardPoints });
+       const updates: Partial<Team> = {};
+       let actionMsg = `Team ${team.teamName} completed bounty: ${completingBounty.title} (+${completingBounty.rewardPoints} pts`;
+
+       if (completingBounty.rewardPoints !== 0) {
+          updates.bonusPoints = (Number(team.bonusPoints) || 0) + completingBounty.rewardPoints;
+       }
+
+       if (completingBounty.rewardCardId && completingBounty.rewardCardId !== 'none') {
+          const reward = resolveRewardCard(team, completingBounty.rewardCardId);
+          if (reward) {
+             updates.cardsOwned = reward.newOwned;
+             const grantedCard = cards.find(c => c.id === reward.finalCardId);
+             actionMsg += grantedCard ? `, +${grantedCard.name} Card` : '';
+          }
+       }
+       actionMsg += ')';
+
+       // 1. Update team
+       if (Object.keys(updates).length > 0) {
+          await updateDoc(doc(db, 'teams', team.id), updates);
+       }
        
        // 2. Update bounty status to completed
        await updateDoc(doc(db, 'bounties', completingBounty.id), { status: 'completed' });
        
        // 3. Create activity log
-       await logActivity('bounty', `Team ${team.teamName} completed bounty: ${completingBounty.title} (+${completingBounty.rewardPoints} points)`, team.teamName, completingBounty.rewardPoints);
-       showToast(`Bounty complete: ${team.teamName} secured +${completingBounty.rewardPoints} Pts`, 'success');
+       await logActivity('bounty', actionMsg, team.teamName, completingBounty.rewardPoints);
+       showToast(`Bounty complete: ${team.teamName}`, 'success');
        
        // Reset modal
        setCompletingBounty(null);
@@ -430,11 +489,12 @@ export default function ControlRoom() {
         </section>
 
         {/* Deck Builder */}
-        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
-          <h2 className="text-lg font-bold mb-4 text-[#39ff14] uppercase flex justify-between">
+        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col gap-4">
+          <h2 className="text-lg font-bold text-[#39ff14] uppercase flex justify-between">
             Deck Builder
             <span className="text-xs text-zinc-500">{cards.length} Configured</span>
           </h2>
+          
           <form onSubmit={handleAddCard} className="space-y-3">
             <div className="flex gap-3">
               <select value={newCard.icon} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center" required>
@@ -442,19 +502,86 @@ export default function ControlRoom() {
                   <option key={iconName} value={iconName}>{iconName}</option>
                 ))}
               </select>
-              <input type="text" placeholder="Card Name" value={newCard.name} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2" required />
-              <select value={newCard.type} onChange={e => setNewCard({...newCard, type: e.target.value as any})} className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 font-bold">
-                <option value="common" className="text-green-400">Common</option>
-                <option value="rare" className="text-purple-400">Rare</option>
-                <option value="legendary" className="text-yellow-400">Legendary</option>
+              <input type="text" placeholder="Card Name" value={newCard.name} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white" required />
+              <select 
+                value={newCard.type} 
+                onChange={e => {
+                  const newType = e.target.value as any;
+                  // Auto-switch icon based on category, user can override later
+                  let defaultIcon = newCard.icon;
+                  if (newType === 'COMMON') defaultIcon = 'Zap';
+                  if (newType === 'RARE') defaultIcon = 'Shield';
+                  if (newType === 'LEGENDARY') defaultIcon = 'Crown';
+                  
+                  setNewCard({...newCard, type: newType, icon: defaultIcon});
+                }} 
+                className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 font-bold uppercase tracking-widest text-xs"
+              >
+                <option value="COMMON" className="text-[#39ff14]">Common</option>
+                <option value="RARE" className="text-purple-400">Rare</option>
+                <option value="LEGENDARY" className="text-yellow-400">Legendary</option>
               </select>
             </div>
             <div className="flex gap-3">
-              <input type="text" placeholder="Description" value={newCard.description} onChange={e => setNewCard({...newCard, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
-              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2" required />
-              <button type="submit" disabled={isAddingCard || !newCard.name || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
+              <input type="text" placeholder="Description" value={newCard.description} onChange={e => setNewCard({...newCard, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white" />
+              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 uppercase placeholder:normal-case placeholder:text-zinc-600 tracking-wider" required />
+              <button type="submit" disabled={isAddingCard || !newCard.name || !newCard.effect || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
             </div>
           </form>
+
+          {/* Live Preview Panel */}
+          <div className="mt-2 pt-4 border-t border-zinc-800">
+             <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-500 mb-3">Live Hologram Preview</div>
+             <div className="max-w-[300px] mx-auto scale-95 origin-top">
+                {(() => {
+                   let borderClass = 'border-[#39ff14]/30 shadow-[0_0_15px_rgba(57,255,20,0.05)]';
+                   let glowClass = 'bg-[#39ff14]';
+                   let textClass = 'text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/10';
+                   let cardGlowEffect = '';
+                   
+                   if (newCard.type === 'RARE') {
+                      borderClass = 'border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10';
+                      glowClass = 'bg-purple-500';
+                      textClass = 'text-purple-400 border-purple-500/40 bg-purple-500/10';
+                   } else if (newCard.type === 'LEGENDARY') {
+                      borderClass = 'border-yellow-500/60 shadow-[0_0_25px_rgba(234,179,8,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-yellow-900/20';
+                      glowClass = 'bg-yellow-500';
+                      textClass = 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
+                      cardGlowEffect = 'animate-[pulse_4s_ease-in-out_infinite_alternate]';
+                   }
+
+                   const IconComp = CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] || CARD_ICONS.CircleSlash;
+
+                   return (
+                     <div className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass} ${cardGlowEffect}`}>
+                       <div className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-30 ${glowClass}`}></div>
+                       {newCard.type === 'LEGENDARY' && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none z-20"></div>
+                       )}
+                       
+                       <div className="flex flex-col h-full relative z-10 min-h-[160px]">
+                          <div className="flex items-start justify-between mb-4">
+                             <div className={`text-3xl p-3 rounded-2xl border bg-zinc-950 shadow-inner ${textClass}`}>
+                               <IconComp className="w-6 h-6 drop-shadow-[0_0_8px_currentColor]" />
+                             </div>
+                             <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded border shadow-sm ${textClass}`}>
+                               {newCard.type}
+                             </span>
+                          </div>
+                          <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight">{newCard.name || 'Undefined'}</h3>
+                          <p className="text-xs text-zinc-400 mb-6 flex-1 font-medium">{newCard.description || 'Awaiting structural data...'}</p>
+                          <div className="pt-3 border-t border-zinc-800">
+                             <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Effect Sequence</div>
+                             <div className={`text-xs font-mono font-black tracking-wider px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 ${textClass.split(' ')[0]}`}>
+                               {newCard.effect || 'NULL'}
+                             </div>
+                          </div>
+                       </div>
+                     </div>
+                   );
+                })()}
+             </div>
+          </div>
         </section>
       </div>
 
@@ -476,10 +603,17 @@ export default function ControlRoom() {
             </div>
             
             {newInjection.type === 'selective' && (
-              <select value={newInjection.targetTeamId} onChange={e => setNewInjection({ ...newInjection, targetTeamId: e.target.value })} className="w-full bg-red-900/20 border border-red-500/50 text-red-200 rounded-lg px-3 py-2 text-xs" required>
-                 <option value="" disabled>Select target team to inject...</option>
-                 {teams.map(t => <option key={t.id} value={t.id}>{t.teamName}</option>)}
-              </select>
+              <div className="flex gap-3">
+                <select value={newInjection.targetTeamId} onChange={e => setNewInjection({ ...newInjection, targetTeamId: e.target.value })} className="flex-1 bg-red-900/20 border border-red-500/50 text-red-200 rounded-lg px-3 py-2 text-xs" required>
+                   <option value="" disabled>Select target team to inject...</option>
+                   {teams.map(t => <option key={t.id} value={t.id}>{t.teamName}</option>)}
+                </select>
+                <select value={newInjection.rewardCardId || ''} onChange={e => setNewInjection({ ...newInjection, rewardCardId: e.target.value })} className="w-1/3 bg-zinc-900 border border-zinc-700 text-zinc-400 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest">
+                   <option value="none">No Card Drop</option>
+                   <option value="random">🎲 Random Card</option>
+                   {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+                </select>
+              </div>
             )}
 
             <div className="flex gap-3">
@@ -513,6 +647,11 @@ export default function ControlRoom() {
             <div className="flex gap-3">
               <input type="text" placeholder="Bounty Objective" value={newBounty.title} onChange={e => setNewBounty({...newBounty, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
               <input type="number" placeholder="Pts (e.g. 100)" value={newBounty.rewardPoints || ''} onChange={e => setNewBounty({...newBounty, rewardPoints: Number(e.target.value)})} className="w-24 bg-zinc-900 border border-zinc-700 text-purple-400 font-mono rounded-lg px-3 py-2 text-sm text-center" />
+              <select value={newBounty.rewardCardId || ''} onChange={e => setNewBounty({ ...newBounty, rewardCardId: e.target.value })} className="w-1/3 bg-zinc-900 border border-zinc-700 text-purple-300 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest focus:border-purple-500 outline-none">
+                 <option value="none">No Card Drop</option>
+                 <option value="random">🎲 Random Card</option>
+                 {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+              </select>
             </div>
             <div className="flex gap-3">
                <input type="text" placeholder="Description & rewards..." value={newBounty.description} onChange={e => setNewBounty({...newBounty, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
@@ -607,19 +746,41 @@ export default function ControlRoom() {
                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-zinc-700 w-full pr-2">
                          {cards.map(c => {
                            const IconComp = CARD_ICONS[c.icon as keyof typeof CARD_ICONS] || CARD_ICONS.Zap;
+                           const isSelected = selectedCards[team.id] === c.id;
                            return (
-                             <motion.button 
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                key={c.id} 
-                                onClick={() => handleAssignCard(team.id, team.teamName, c.id)} 
-                                disabled={isLocked}
-                                className="flex-shrink-0 flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-blue-500/50 rounded px-2 py-1 transition-colors"
-                                title={`Assign ${c.name}`}
-                             >
-                               <IconComp className="w-4 h-4" />
-                               <span className="text-[10px] uppercase font-bold text-zinc-400 max-w-[60px] truncate">{c.name}</span>
-                             </motion.button>
+                             <div key={c.id} className="flex-shrink-0 flex flex-row items-center gap-1">
+                               <motion.button 
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => setSelectedCards(prev => ({ ...prev, [team.id]: isSelected ? '' : c.id }))} 
+                                  disabled={isLocked}
+                                  className={`flex items-center gap-1.5 rounded px-2 py-1 transition-colors border ${isSelected ? 'bg-blue-900/60 border-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 hover:border-blue-500/50 text-zinc-400'}`}
+                                  title={`Select ${c.name}`}
+                               >
+                                 <IconComp className="w-4 h-4" />
+                                 <span className={`text-[10px] uppercase font-bold max-w-[60px] truncate ${isSelected ? 'text-white' : 'text-zinc-400'}`}>{c.name}</span>
+                               </motion.button>
+                               <AnimatePresence>
+                                 {isSelected && (
+                                   <motion.button
+                                      initial={{ opacity: 0, scale: 0.5, width: 0 }}
+                                      animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                                      exit={{ opacity: 0, scale: 0.5, width: 0 }}
+                                      onClick={() => {
+                                        handleAssignCard(team.id, team.teamName, c.id);
+                                        setSelectedCards(prev => {
+                                          const next = {...prev};
+                                          delete next[team.id];
+                                          return next;
+                                        });
+                                      }}
+                                      className="bg-blue-500 hover:bg-blue-400 text-white text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded shadow-[0_0_10px_rgba(59,130,246,0.8)]"
+                                   >
+                                     GIVE
+                                   </motion.button>
+                                 )}
+                               </AnimatePresence>
+                             </div>
                            );
                          })}
                          {cards.length === 0 && <span className="text-[10px] text-zinc-600 italic">No cards inside Deck Builder</span>}

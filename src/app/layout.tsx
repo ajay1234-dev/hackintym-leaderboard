@@ -15,6 +15,25 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Hackintym: Evolution Arena",
   description: "Real-time hackathon management and leaderboard system",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
+  themeColor: "#0a0a0a",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/manifest.json",
+  openGraph: {
+    title: "Hackintym: Evolution Arena",
+    description: "Real-time hackathon management and leaderboard system",
+    type: "website",
+    url: "https://hackintym.vercel.app",
+    siteName: "Hackintym: Evolution Arena",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Hackintym: Evolution Arena",
+    description: "Real-time hackathon management and leaderboard system",
+  },
 };
 
 export default function RootLayout({
