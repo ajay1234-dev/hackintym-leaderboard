@@ -8,7 +8,7 @@ import { db, auth } from '@/lib/firebase';
 import { Team, Card, Injection, Bounty } from '@/types';
 import { syncSession } from '@/app/actions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, Sync, Target } from 'lucide-react';
+import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, RefreshCw, Target } from 'lucide-react';
 import { CARD_ICONS } from '@/lib/icons';
 import { getActiveMultiplier, isFrozen, getActiveGlobalPhenomena } from '@/lib/effectEngine';
 
