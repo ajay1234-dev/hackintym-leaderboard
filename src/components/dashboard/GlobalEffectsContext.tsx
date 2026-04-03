@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/types';
 import { CARD_ICONS } from '@/lib/icons';
 import { CardCelebrationPopup } from '../celebration/CardCelebrationPopup';
+import { enableAudio } from '@/lib/soundManager';
 
 export type CardCelebration = {
   id: string;
@@ -82,6 +83,12 @@ export const GlobalEffectsProvider = ({ children }: { children: ReactNode }) => 
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    const enable = () => enableAudio();
+    window.addEventListener("click", enable, { once: true });
+    return () => window.removeEventListener("click", enable);
+  }, []);
 
   useEffect(() => {
     // Queue lock mechanism - prevent overlapping celebrations

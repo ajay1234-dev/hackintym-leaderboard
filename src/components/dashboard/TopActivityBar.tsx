@@ -7,6 +7,7 @@ import { ActivityLog, Card } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Clock, ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { useGlobalEffects } from './GlobalEffectsContext';
+import { playActivitySound, playBountySound, playInjectionSound } from '@/lib/soundManager';
 
 export default function TopActivityBar() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -16,6 +17,7 @@ export default function TopActivityBar() {
   const { showCardCelebration } = useGlobalEffects();
   
   const [flashId, setFlashId] = useState<string | null>(null);
+  const lastLogId = useRef<string | null>(null);
 
   useEffect(() => {
     // Listen to Activity Logs (limit 5 directly in query)
@@ -27,8 +29,23 @@ export default function TopActivityBar() {
       
       // Trigger flash animation if there's a new latest log
       if (data.length > 0) {
-         setFlashId(data[0].id);
-         setTimeout(() => setFlashId(null), 300);
+         const topLog = data[0];
+         if (lastLogId.current && lastLogId.current !== topLog.id) {
+            setFlashId(topLog.id);
+            setTimeout(() => setFlashId(null), 300);
+
+            // Audio Routing
+            const rawMsg = topLog.message || topLog.action || '';
+            if (topLog.actionType === 'bounty' || rawMsg.includes('Bounty')) {
+               playBountySound();
+            } else if (topLog.actionType === 'injection' || rawMsg.includes('Injection')) {
+               playInjectionSound();
+            } else if (topLog.actionType !== 'card' && topLog.actionType !== 'score') {
+               // Subtly play activity for general events, skip cards/scores since they natively sound
+               playActivitySound();
+            }
+         }
+         lastLogId.current = topLog.id;
       }
     });
 

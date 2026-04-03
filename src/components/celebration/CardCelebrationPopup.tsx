@@ -6,6 +6,7 @@ import { Card } from '@/types';
 import { CARD_ICONS } from '@/lib/icons';
 import { GlowEffect } from './GlowEffect';
 import { ParticleBurst } from './ParticleBurst';
+import { playCardSound, playCelebrationSound, playScoreSound } from '@/lib/soundManager';
 
 interface CardCelebrationPopupProps {
   celebration: {
@@ -18,20 +19,12 @@ interface CardCelebrationPopupProps {
 
 export function CardCelebrationPopup({ celebration, isVisible }: CardCelebrationPopupProps) {
   useEffect(() => {
-    const enableAudio = () => {
-      (window as any).audioEnabled = true;
-    };
-    window.addEventListener("click", enableAudio, { once: true });
-    return () => window.removeEventListener("click", enableAudio);
-  }, []);
-
-  useEffect(() => {
-    if (isVisible && (window as any).audioEnabled) {
-      const audio = new Audio("/sounds/unlock.mp3");
-      audio.volume = 0.5;
-      audio.play().catch(() => {});
+    if (isVisible && celebration?.card) {
+      if (celebration.card.type === 'LEGENDARY') playCelebrationSound();
+      else if (celebration.card.type === 'RARE') playCardSound();
+      else playScoreSound();
     }
-  }, [isVisible]);
+  }, [isVisible, celebration]);
 
   if (!celebration || !isVisible) return null;
 

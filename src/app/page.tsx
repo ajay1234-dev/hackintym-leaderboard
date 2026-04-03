@@ -33,7 +33,7 @@ export default function DashboardPage() {
             <Link href="/protocol" className="flex items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-zinc-300 hover:text-amber-400 transition-all border border-zinc-700 hover:border-amber-500/50 hover:shadow-[0_0_15px_rgba(245,158,11,0.3)] px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-zinc-900/50 uppercase tracking-widest hover:scale-105 active:scale-95">
               <BookOpen size={14} className="sm:w-4 sm:h-4" /> Rules
             </Link>
-            <Link href="/control-room" className="flex items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-[#39ff14]/90 hover:text-[#39ff14] transition-all border border-[#39ff14]/30 hover:border-[#39ff14] hover:shadow-[0_0_20px_rgba(57,255,20,0.4)] shadow-[0_0_10px_rgba(57,255,20,0.1)] px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-[#39ff14]/5 uppercase tracking-widest hover:scale-105 active:scale-95 font-bold">
+            <Link href="/control-room/login" className="flex items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-[#39ff14]/90 hover:text-[#39ff14] transition-all border border-[#39ff14]/30 hover:border-[#39ff14] hover:shadow-[0_0_20px_rgba(57,255,20,0.4)] shadow-[0_0_10px_rgba(57,255,20,0.1)] px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-[#39ff14]/5 uppercase tracking-widest hover:scale-105 active:scale-95 font-bold">
               <Lock size={14} className="sm:w-4 sm:h-4" /> Control
             </Link>
           </div>

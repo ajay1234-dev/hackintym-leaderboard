@@ -11,6 +11,7 @@ import { useGlobalEffects, useTeamHighlight } from './GlobalEffectsContext';
 import { useCardDetection } from '@/hooks/useCardDetection';
 import { CARD_ICONS } from '@/lib/icons';
 import { Info } from 'lucide-react';
+import { playRankChangeSound } from '@/lib/soundManager';
 
 // Extend Team to include totalScore locally for sorting and display
 interface TeamWithScore extends Team {
@@ -201,6 +202,7 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const { showTooltip, hideTooltip, showCardCelebration, triggerTeamHighlight } = useGlobalEffects();
   const isFirstRender = useRef(true);
+  const prevRanks = useRef<Record<string, number>>({});
 
   // Card detection hook with celebration triggers
   useCardDetection({
@@ -246,7 +248,29 @@ export default function Leaderboard() {
         } as TeamWithScore;
       });
 
-      setTeams(teamsData.sort((a, b) => b.totalScore - a.totalScore));
+      const sortedTeams = teamsData.sort((a, b) => b.totalScore - a.totalScore);
+      
+      // Perform strict rank change checks to play audio
+      if (!isFirstRender.current) {
+         let playedRankSound = false; // anti-spam for batch changes
+         sortedTeams.forEach((t, i) => {
+            const newRank = i + 1;
+            const prevRank = prevRanks.current[t.id];
+            if (prevRank && newRank < prevRank) {
+               if (!playedRankSound && (newRank <= 3 || (prevRank - newRank) >= 3)) {
+                  playRankChangeSound();
+                  playedRankSound = true;
+               }
+            }
+            prevRanks.current[t.id] = newRank;
+         });
+      } else {
+         sortedTeams.forEach((t, i) => {
+            prevRanks.current[t.id] = i + 1;
+         });
+      }
+
+      setTeams(sortedTeams);
       setLoading(false);
     }, (error) => {
       console.error("Error fetching teams:", error);

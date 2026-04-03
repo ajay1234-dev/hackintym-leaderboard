@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { playScoreSound } from '@/lib/soundManager';
 
 interface AnimatedScoreProps {
   value: number;
@@ -20,6 +21,8 @@ export default function AnimatedScore({ value, className = '' }: AnimatedScorePr
     }
 
     if (displayValue === value) return;
+    
+    playScoreSound();
     
     const startValue = displayValue;
     const endValue = value;
