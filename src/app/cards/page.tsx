@@ -50,7 +50,7 @@ export default function CardsLibrary() {
 
   return (
     <main className="min-h-screen p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 md:space-y-8">
-      <header className="glass-panel p-6 rounded-2xl flex items-center justify-between border neon-border z-10 relative shadow-[0_0_30px_rgba(57,255,20,0.05)]">
+      <header className="glass-panel p-4 md:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border neon-border z-10 relative shadow-[0_0_30px_rgba(57,255,20,0.05)]">
         <div>
           <h1 className="text-2xl md:text-5xl font-black uppercase drop-shadow-[0_0_15px_rgba(57,255,20,0.5)] text-[#39ff14]">Power Cards</h1>
           <p className="text-zinc-400 text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1">Registry Protocol</p>

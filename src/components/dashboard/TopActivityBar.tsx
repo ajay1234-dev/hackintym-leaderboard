@@ -82,80 +82,43 @@ export default function TopActivityBar() {
     }
   };
 
-  const activityLabelMap: Record<string, string> = {
-    SCORE_UPDATE: "Score Updated",
-    CARD_GAIN: "Card Unlocked",
-    BOUNTY_CLAIM: "Bounty Completed",
-    INJECTION: "Injection Activated"
-  };
-
   // Returns formatted message string, matched card and aesthetic classes for a given log
   const getLogDetails = (log: ActivityLog) => {
-    const rawAction = log.message || log.action || '';
+    const rawAction = log.message || log.action || 'System Event';
     let logMessage = rawAction.replace(/ \(Manual:.*?\)/, '');
-    if (activityLabelMap[logMessage]) {
-      logMessage = activityLabelMap[logMessage];
-    }
-    
-    let cardInfo: Card | null = null;
     
     let actionColor = 'text-zinc-300';
     let iconColor = 'text-zinc-500';
     let bgHighlight = 'bg-transparent';
     let borderLine = 'border-l-zinc-500';
 
-    if (log.actionType === 'score') {
-        const pointsStr = logMessage.match(/([+-]\d+)/)?.[0] || '';
-        logMessage = `${log.teamName || 'A team'} gained ${pointsStr} points`;
+    if (log.actionType === 'score' || logMessage.toLowerCase().includes('points') || logMessage.toLowerCase().includes('score')) {
         actionColor = 'text-[#39ff14]';
         iconColor = 'text-[var(--color-neon-green)]';
         bgHighlight = 'bg-[#39ff14]/5';
         borderLine = 'border-l-[#39ff14]';
-    } else if (log.actionType === 'card') {
-        const cardName = logMessage.match(/acquired (.+) card/)?.[1] || 'a card';
-        const foundCard = cards.find(c => c.name.toLowerCase() === cardName.toLowerCase());
-        cardInfo = foundCard || null;
+    } else if (log.actionType === 'card' || logMessage.toLowerCase().includes('card')) {
+        const isLegendary = logMessage.toLowerCase().includes('legendary') || logMessage.toLowerCase().includes('mythic');
+        const isRare = logMessage.toLowerCase().includes('rare');
         
-        if (cardInfo) {
-          const rarityPrefix = cardInfo.type === 'LEGENDARY' ? 'LEGENDARY' : cardInfo.type === 'RARE' ? 'RARE' : '';
-          logMessage = `${log.teamName || 'A team'} unlocked ${rarityPrefix} ${cardName.toUpperCase()} 🎴`;
-          if (cardInfo.type === 'LEGENDARY') {
-            actionColor = 'text-yellow-400';
-            iconColor = 'text-yellow-500';
-            bgHighlight = 'bg-yellow-500/10';
-            borderLine = 'border-l-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]';
-          } else if (cardInfo.type === 'RARE') {
-            actionColor = 'text-purple-400';
-            iconColor = 'text-purple-500';
-            bgHighlight = 'bg-purple-500/10';
-            borderLine = 'border-l-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]';
-          } else {
-            actionColor = 'text-cyan-400';
-            iconColor = 'text-cyan-500';
-            bgHighlight = 'bg-cyan-500/5';
-            borderLine = 'border-l-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]';
-          }
+        if (isLegendary) {
+          actionColor = 'text-yellow-400'; iconColor = 'text-yellow-500'; bgHighlight = 'bg-yellow-500/10'; borderLine = 'border-l-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]';
+        } else if (isRare) {
+          actionColor = 'text-purple-400'; iconColor = 'text-purple-500'; bgHighlight = 'bg-purple-500/10'; borderLine = 'border-l-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]';
         } else {
-          logMessage = `${log.teamName || 'A team'} unlocked ${cardName.toUpperCase()} 🎴`;
-          actionColor = 'text-blue-400';
-          iconColor = 'text-blue-500';
-          bgHighlight = 'bg-blue-500/5';
-          borderLine = 'border-l-blue-400';
+          actionColor = 'text-cyan-400'; iconColor = 'text-cyan-500'; bgHighlight = 'bg-cyan-500/5'; borderLine = 'border-l-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]';
         }
-    } else if (log.actionType === 'bounty' || logMessage.includes('Bounty')) {
-        logMessage = `${log.teamName || 'A team'} earned completed a bounty 🎯`;
+    } else if (log.actionType === 'bounty' || logMessage.toLowerCase().includes('bounty')) {
         actionColor = 'text-purple-400';
         iconColor = 'text-purple-500';
         bgHighlight = 'bg-purple-500/5';
         borderLine = 'border-l-purple-400';
-    } else if (log.actionType === 'injection' || logMessage.includes('Injection')) {
-        logMessage = `${log.teamName || 'A team'} received an injection`;
+    } else if (log.actionType === 'injection' || logMessage.toLowerCase().includes('injection')) {
         actionColor = 'text-red-400';
         iconColor = 'text-red-500';
         bgHighlight = 'bg-red-500/5';
         borderLine = 'border-l-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]';
-    } else if (!log.actionType) {
-       // Legacy
+    } else {
        if (logMessage.toLowerCase().includes('executed') || logMessage.toLowerCase().includes('deleted')) {
         actionColor = 'text-red-400'; iconColor = 'text-red-500'; borderLine = 'border-l-red-500';
       } else if (logMessage.toLowerCase().includes('granted') || logMessage.toLowerCase().includes('added')) {
@@ -165,7 +128,7 @@ export default function TopActivityBar() {
       }
     }
 
-    return { logMessage, cardInfo, actionColor, iconColor, bgHighlight, borderLine };
+    return { logMessage, actionColor, iconColor, bgHighlight, borderLine };
   };
 
   const latestLog = logs[0];
@@ -198,14 +161,25 @@ export default function TopActivityBar() {
            <div className="flex-1 min-w-0 pr-4">
               {logs.length === 0 ? (
                  <span className="text-xs text-zinc-500 font-mono tracking-widest uppercase truncate block">Waiting for activity...</span>
+              ) : isExpanded ? (
+                 <motion.div
+                    key="expanded-title"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-2"
+                 >
+                    <span className="text-xs sm:text-sm font-bold text-zinc-400 uppercase tracking-widest">
+                       Live Activity Uplink
+                    </span>
+                 </motion.div>
               ) : (
-                 <AnimatePresence mode="popLayout">
+                 <AnimatePresence mode="wait">
                     <motion.div
                        key={latestLog.id}
-                       initial={{ opacity: 0, y: -20, scale: 1 }}
+                       initial={{ opacity: 0, y: -10 }}
                        animate={{ opacity: 1, y: 0, scale: flashId === latestLog.id ? [1, 1.02, 1] : 1 }}
-                       exit={{ opacity: 0, y: 20 }}
-                       transition={{ duration: 0.3 }}
+                       exit={{ opacity: 0, y: 10 }}
+                       transition={{ duration: 0.2 }}
                        className="flex items-center gap-2"
                     >
                        <span className="text-[10px] items-center py-0.5 px-1.5 rounded-md font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 hidden sm:flex shrink-0">
@@ -247,7 +221,7 @@ export default function TopActivityBar() {
                    <div className="text-center py-6 text-xs text-zinc-500 uppercase tracking-widest italic font-mono">No History</div>
                 )}
                           {logs.map((log) => {
-                   const { logMessage, cardInfo, actionColor, bgHighlight, borderLine } = getLogDetails(log);
+                   const { logMessage, actionColor, bgHighlight, borderLine } = getLogDetails(log);
                    const timeString = getTimeString(log.timestamp);
 
                    return (

@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { Lock, BookOpen } from 'lucide-react';
 import { GlobalEffectsProvider } from '@/components/dashboard/GlobalEffectsContext';
 import TopActivityBar from '@/components/dashboard/TopActivityBar';
+import GlobalEventBanner from '@/components/dashboard/GlobalEventBanner';
 
 export default function DashboardPage() {
   return (
     <main className="min-h-screen p-3 sm:p-4 md:p-6 flex flex-col gap-4 sm:gap-6 max-w-[1600px] mx-auto">
+      <GlobalEventBanner />
       {/* Title Header */}
       <header className="glass-panel p-4 sm:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between border neon-border gap-4">
         <div className="flex-1">

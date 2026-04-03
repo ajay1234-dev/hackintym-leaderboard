@@ -37,6 +37,10 @@ export interface Injection {
   type?: 'global' | 'selective';
   targetTeamId?: string;
   rewardCardId?: string;
+  eventType?: 'POINTS' | 'MULTIPLIER' | 'FREEZE' | 'CARD_DROP' | 'SPECIAL_RULE';
+  multiplier?: number;
+  duration?: number;
+  expiresAt?: number;
 }
 
 export interface Bounty {

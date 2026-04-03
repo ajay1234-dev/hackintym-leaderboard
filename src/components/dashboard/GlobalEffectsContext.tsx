@@ -97,17 +97,19 @@ export const GlobalEffectsProvider = ({ children }: { children: ReactNode }) => 
       setActiveCelebration(next);
       setIsCelebrationPlaying(true);
       setCelebrationQueue(curr => curr.slice(1));
-      
+    }
+  }, [celebrationQueue, isCelebrationPlaying]);
+
+  useEffect(() => {
+    if (activeCelebration) {
       // Auto-dismiss after 3.5 seconds unconditionally 
-      const duration = 3500;
-      
       const timer = setTimeout(() => {
         setActiveCelebration(null);
         setIsCelebrationPlaying(false);
-      }, duration);
+      }, 3500);
       return () => clearTimeout(timer);
     }
-  }, [celebrationQueue, isCelebrationPlaying]);
+  }, [activeCelebration]);
 
   const showTooltip = useCallback((data: TooltipData) => setTooltip(data), []);
   const hideTooltip = useCallback(() => setTooltip(null), []);

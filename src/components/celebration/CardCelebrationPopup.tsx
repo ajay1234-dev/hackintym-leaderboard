@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/types';
 import { CARD_ICONS } from '@/lib/icons';
@@ -18,6 +18,14 @@ interface CardCelebrationPopupProps {
 }
 
 export function CardCelebrationPopup({ celebration, isVisible }: CardCelebrationPopupProps) {
+  const [lastCelebration, setLastCelebration] = useState(celebration);
+
+  useEffect(() => {
+    if (celebration) {
+      setLastCelebration(celebration);
+    }
+  }, [celebration]);
+
   useEffect(() => {
     if (isVisible && celebration?.card) {
       if (celebration.card.type === 'LEGENDARY') playCelebrationSound();
@@ -26,9 +34,9 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
     }
   }, [isVisible, celebration]);
 
-  if (!celebration || !isVisible) return null;
+  if (!lastCelebration) return null;
 
-  const { teamName, card } = celebration;
+  const { teamName, card } = lastCelebration;
   
   // Rarity-based styling
   const getRarityStyles = (type: string) => {

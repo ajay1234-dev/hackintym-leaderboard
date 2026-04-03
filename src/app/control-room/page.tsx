@@ -8,8 +8,9 @@ import { db, auth } from '@/lib/firebase';
 import { Team, Card, Injection, Bounty } from '@/types';
 import { syncSession } from '@/app/actions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity } from 'lucide-react';
+import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, Sync, Target } from 'lucide-react';
 import { CARD_ICONS } from '@/lib/icons';
+import { getActiveMultiplier, isFrozen, getActiveGlobalPhenomena } from '@/lib/effectEngine';
 
 export default function ControlRoom() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -33,7 +34,7 @@ export default function ControlRoom() {
   const [selectedCards, setSelectedCards] = useState<Record<string, string>>({});
 
   // Events State
-  const [newInjection, setNewInjection] = useState<{title: string, description: string, points: number, type: 'global' | 'selective', targetTeamId: string, rewardCardId: string}>({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '' });
+  const [newInjection, setNewInjection] = useState<Partial<Injection>>({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '', eventType: 'POINTS', duration: 0, multiplier: 2 });
   const [isAddingInjection, setIsAddingInjection] = useState(false);
 
   const [newBounty, setNewBounty] = useState({ title: '', description: '', rewardPoints: 0, rewardCardId: '' });
@@ -148,6 +149,12 @@ export default function ControlRoom() {
   };
 
   const handleApplyScore = async (id: string, teamName: string) => {
+    if (isFrozen(injections)) {
+       showToast("Score updates are FROZEN by a Global Phenomenon!", "info");
+       return;
+    }
+    const mult = getActiveMultiplier(injections);
+
     const draft = draftScores[id];
     if (!draft) return;
 
@@ -160,12 +167,19 @@ export default function ControlRoom() {
 
     (['review1', 'review2', 'review3', 'bonusPoints'] as const).forEach(key => {
        if (draft[key] !== undefined && draft[key] !== oldTeam[key]) {
-          const delta = Number(draft[key]) - (Number(oldTeam[key]) || 0);
+          let delta = Number(draft[key]) - (Number(oldTeam[key]) || 0);
+          
+          if (mult !== 1) {
+             delta = delta * mult;
+             updates[key] = (Number(oldTeam[key]) || 0) + delta;
+          } else {
+             updates[key] = draft[key];
+          }
+
           totalDelta += delta;
-          updates[key] = draft[key];
           
           let fieldName = key === 'bonusPoints' ? 'Bonus' : `R${key.replace('review', '')}`;
-          messageParts.push(`${delta > 0 ? '+' : ''}${delta} ${fieldName}`);
+          messageParts.push(`${delta > 0 ? '+' : ''}${delta} ${fieldName}${mult !== 1 ? ` (x${mult})` : ''}`);
        }
     });
 
@@ -262,55 +276,94 @@ export default function ControlRoom() {
   // Events Logic
   const handleAddInjection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newInjection.title.trim() || !newInjection.description.trim()) return;
+    if (!newInjection.title?.trim() || !newInjection.description?.trim()) return;
     if (newInjection.type === 'selective' && !newInjection.targetTeamId) {
        alert("Please select a target team for this selective phenomenon.");
+       return;
+    }
+    if (newInjection.type === 'global' && getActiveGlobalPhenomena(injections).length > 0) {
+       alert("You cannot deploy a Global Phenomenon while one is already active.");
        return;
     }
     
     setIsAddingInjection(true);
     try {
-      await addDoc(collection(db, 'injections'), { ...newInjection, status: 'active' });
-      
+      const injectionPayload: Partial<Injection> = {
+         title: newInjection.title,
+         description: newInjection.description,
+         status: 'active',
+         type: newInjection.type,
+         eventType: newInjection.eventType
+      };
+
+      if (newInjection.duration && newInjection.duration > 0) {
+         injectionPayload.duration = newInjection.duration;
+         injectionPayload.expiresAt = Date.now() + newInjection.duration * 1000;
+      }
+      if (newInjection.type === 'selective') {
+         injectionPayload.targetTeamId = newInjection.targetTeamId;
+      }
+
+      let actionMsg = '';
+
       if (newInjection.type === 'global') {
-         // Apply points to all teams
-         if (newInjection.points !== 0) {
+         if (newInjection.eventType === 'POINTS') {
+            injectionPayload.points = newInjection.points;
+            actionMsg = `🌍 Global Phenomenon Activated: ${newInjection.title} (${newInjection.points! > 0 ? '+' : ''}${newInjection.points} points)${newInjection.duration ? ` for ${newInjection.duration}s` : ''}`;
+         } else if (newInjection.eventType === 'MULTIPLIER') {
+            injectionPayload.multiplier = newInjection.multiplier;
+            actionMsg = `🌍 Global Phenomenon Activated: ${newInjection.title} (${newInjection.multiplier}x Multiplier)${newInjection.duration ? ` for ${newInjection.duration}s` : ''}`;
+         } else if (newInjection.eventType === 'FREEZE') {
+            actionMsg = `🌍 Global Phenomenon Activated: ${newInjection.title} (SCORE FREEZE)${newInjection.duration ? ` for ${newInjection.duration}s` : ''}`;
+         } else {
+            actionMsg = `🌍 Global Phenomenon Activated: ${newInjection.title}${newInjection.duration ? ` for ${newInjection.duration}s` : ''}`;
+         }
+      } else {
+         const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
+         if (!targetTeam) throw new Error("Team not found");
+
+         actionMsg = `🎯 Injection: Team ${targetTeam.teamName} received `;
+         let parts = [];
+
+         if (newInjection.eventType === 'POINTS') {
+            injectionPayload.points = newInjection.points;
+            parts.push(`${newInjection.points! > 0 ? '+' : ''}${newInjection.points} pts`);
+         }
+         if (newInjection.eventType === 'CARD_DROP' && newInjection.rewardCardId && newInjection.rewardCardId !== 'none') {
+            injectionPayload.rewardCardId = newInjection.rewardCardId;
+            const reward = resolveRewardCard(targetTeam, newInjection.rewardCardId);
+            if (reward) {
+               await updateDoc(doc(db, 'teams', targetTeam.id), { cardsOwned: reward.newOwned });
+               const grantedCard = cards.find(c => c.id === reward.finalCardId);
+               if (grantedCard) parts.push(`the ${grantedCard.name} card`);
+            }
+         }
+         
+         if (parts.length === 0) parts.push('a Special Rule');
+         actionMsg += parts.join(' and ');
+      }
+
+      await addDoc(collection(db, 'injections'), injectionPayload);
+      
+      if (newInjection.eventType === 'POINTS') {
+         if (newInjection.type === 'global' && newInjection.points !== 0) {
             for (const team of teams) {
               const currentScore = Number(team.bonusPoints) || 0;
-              await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + newInjection.points });
+              await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + newInjection.points! });
             }
-         }
-         await logActivity('injection', `Injection activated: ${newInjection.title} (${newInjection.points > 0 ? '+' : ''}${newInjection.points} points to all teams)`, undefined, newInjection.points);
-      } else {
-         // Apply to selective team
-         const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
-         if (targetTeam) {
-            const updates: Partial<Team> = {};
-            let actionMsg = `Injection applied: ${newInjection.title} → ${targetTeam.teamName} (${newInjection.points > 0 ? '+' : ''}${newInjection.points} pts`;
-
-            if (newInjection.points !== 0) {
-               updates.bonusPoints = (Number(targetTeam.bonusPoints) || 0) + newInjection.points;
+         } else if (newInjection.type === 'selective' && newInjection.points !== 0) {
+            const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
+            if (targetTeam) {
+               const currentScore = Number(targetTeam.bonusPoints) || 0;
+               await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + newInjection.points! });
             }
-
-            if (newInjection.rewardCardId && newInjection.rewardCardId !== 'none') {
-               const reward = resolveRewardCard(targetTeam, newInjection.rewardCardId);
-               if (reward) {
-                  updates.cardsOwned = reward.newOwned;
-                  const grantedCard = cards.find(c => c.id === reward.finalCardId);
-                  actionMsg += grantedCard ? `, +${grantedCard.name} Card` : '';
-               }
-            }
-            actionMsg += ')';
-
-            if (Object.keys(updates).length > 0) {
-               await updateDoc(doc(db, 'teams', targetTeam.id), updates);
-            }
-            await logActivity('injection', actionMsg, targetTeam.teamName, newInjection.points);
-            showToast(`Injection targeted: ${targetTeam.teamName} (${newInjection.points > 0 ? '+' : ''}${newInjection.points} pts)`, 'success');
          }
       }
+
+      await logActivity('injection', actionMsg, newInjection.type === 'selective' ? teams.find(t => t.id === newInjection.targetTeamId)?.teamName : undefined, newInjection.points || 0);
+      showToast(`Injection deployed: ${newInjection.title}`, 'success');
       
-      setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '' });
+      setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '', eventType: 'POINTS', duration: 0, multiplier: 2 });
     } finally { setIsAddingInjection(false); }
   };
 
@@ -482,7 +535,7 @@ export default function ControlRoom() {
         {/* Add Team */}
         <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
           <h2 className="text-lg font-bold mb-4 text-[#39ff14] uppercase">Team Registry</h2>
-          <form onSubmit={handleAddTeam} className="flex gap-3">
+          <form onSubmit={handleAddTeam} className="flex flex-col sm:flex-row gap-3">
             <input type="text" placeholder="Team Name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-4 focus:outline-none focus:border-[#39ff14] font-bold" disabled={isAddingTeam || isLocked} />
             <button type="submit" disabled={isAddingTeam || !newTeamName.trim() || isLocked} className="bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14] text-[#39ff14] px-6 py-2 rounded-lg font-black uppercase tracking-widest disabled:opacity-50 transition-colors">Deploy</button>
           </form>
@@ -496,8 +549,8 @@ export default function ControlRoom() {
           </h2>
           
           <form onSubmit={handleAddCard} className="space-y-3">
-            <div className="flex gap-3">
-              <select value={newCard.icon} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center" required>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <select value={newCard.icon} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center" required>
                 {Object.keys(CARD_ICONS).map(iconName => (
                   <option key={iconName} value={iconName}>{iconName}</option>
                 ))}
@@ -522,10 +575,10 @@ export default function ControlRoom() {
                 <option value="LEGENDARY" className="text-yellow-400">Legendary</option>
               </select>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input type="text" placeholder="Description" value={newCard.description} onChange={e => setNewCard({...newCard, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white" />
-              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 uppercase placeholder:normal-case placeholder:text-zinc-600 tracking-wider" required />
-              <button type="submit" disabled={isAddingCard || !newCard.name || !newCard.effect || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
+              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 uppercase placeholder:normal-case placeholder:text-zinc-600 tracking-wider" required />
+              <button type="submit" disabled={isAddingCard || !newCard.name || !newCard.effect || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 py-2 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
             </div>
           </form>
 
@@ -593,32 +646,62 @@ export default function ControlRoom() {
             <span className="text-xs text-zinc-500">{injections.filter(i => i.status === 'active').length} Active</span>
           </h2>
           <form onSubmit={handleAddInjection} className="space-y-3 mb-4">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input type="text" placeholder="Phenomenon Title" value={newInjection.title} onChange={e => setNewInjection({...newInjection, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
-              <input type="number" placeholder="Pts" value={newInjection.points || ''} onChange={e => setNewInjection({...newInjection, points: Number(e.target.value)})} className="w-20 bg-zinc-900 border border-zinc-700 text-red-400 font-mono rounded-lg px-3 py-2 text-sm text-center" />
-              <select value={newInjection.type} onChange={e => setNewInjection({ ...newInjection, type: e.target.value as 'global' | 'selective', targetTeamId: '' })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs">
-                 <option value="global">Global Effect</option>
+              
+              <select value={newInjection.type} onChange={e => setNewInjection({ ...newInjection, type: e.target.value as 'global' | 'selective', targetTeamId: '', eventType: 'POINTS' })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider">
+                 <option value="global">Global Phenomenon</option>
                  <option value="selective">Target Team</option>
+              </select>
+
+              <select value={newInjection.eventType} onChange={e => setNewInjection({ ...newInjection, eventType: e.target.value as any })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider text-[#39ff14]">
+                 <option value="POINTS">Points Change</option>
+                 <option value="SPECIAL_RULE">Special Rule</option>
+                 {newInjection.type === 'global' && (
+                    <>
+                    <option value="MULTIPLIER">Multiplier Mod</option>
+                    <option value="FREEZE">Score Freeze</option>
+                    </>
+                 )}
+                 {newInjection.type === 'selective' && (
+                    <option value="CARD_DROP">Card Drop</option>
+                 )}
               </select>
             </div>
             
+            <div className="flex flex-col sm:flex-row gap-3">
+              {newInjection.eventType === 'POINTS' && (
+                 <input type="number" placeholder="Pts" value={newInjection.points || ''} onChange={e => setNewInjection({...newInjection, points: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 text-sm text-center font-bold" />
+              )}
+              {newInjection.eventType === 'MULTIPLIER' && (
+                 <input type="number" step="0.1" placeholder="Mult (e.g. 2)" value={newInjection.multiplier || ''} onChange={e => setNewInjection({...newInjection, multiplier: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-blue-400 font-mono rounded-lg px-3 py-2 text-sm text-center font-bold" />
+              )}
+              
+              <div className="flex-1 w-full flex gap-3 relative">
+                 <div className="absolute top-1/2 -translate-y-1/2 left-3 text-[10px] uppercase font-bold text-zinc-500 pointer-events-none">Duration (sec)</div>
+                 <input type="number" placeholder="0 = Infinite" value={newInjection.duration || ''} onChange={e => setNewInjection({...newInjection, duration: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-700 text-amber-400 font-mono rounded-lg pl-28 pr-3 py-2 text-sm font-bold" />
+              </div>
+            </div>
+            
             {newInjection.type === 'selective' && (
-              <div className="flex gap-3">
-                <select value={newInjection.targetTeamId} onChange={e => setNewInjection({ ...newInjection, targetTeamId: e.target.value })} className="flex-1 bg-red-900/20 border border-red-500/50 text-red-200 rounded-lg px-3 py-2 text-xs" required>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select value={newInjection.targetTeamId} onChange={e => setNewInjection({ ...newInjection, targetTeamId: e.target.value })} className="flex-1 bg-red-900/20 border border-red-500/50 text-red-200 rounded-lg px-3 py-2 text-xs" required={newInjection.type==='selective'}>
                    <option value="" disabled>Select target team to inject...</option>
                    {teams.map(t => <option key={t.id} value={t.id}>{t.teamName}</option>)}
                 </select>
-                <select value={newInjection.rewardCardId || ''} onChange={e => setNewInjection({ ...newInjection, rewardCardId: e.target.value })} className="w-1/3 bg-zinc-900 border border-zinc-700 text-zinc-400 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest">
-                   <option value="none">No Card Drop</option>
-                   <option value="random">🎲 Random Card</option>
-                   {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
-                </select>
+                {newInjection.eventType === 'CARD_DROP' && (
+                  <select value={newInjection.rewardCardId || ''} onChange={e => setNewInjection({ ...newInjection, rewardCardId: e.target.value })} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-zinc-400 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest">
+                     <option value="none">No Card Drop</option>
+                     <option value="random">🎲 Random Card</option>
+                     {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+                  </select>
+                )}
               </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
                <input type="text" placeholder="Description & requirements..." value={newInjection.description} onChange={e => setNewInjection({...newInjection, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
-               <button type="submit" disabled={isAddingInjection || !newInjection.title || (newInjection.type === 'selective' && !newInjection.targetTeamId) || isLocked} className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/40 px-4 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Deploy</button>
+               <button type="submit" disabled={isAddingInjection || !newInjection.title || (newInjection.type === 'selective' && !newInjection.targetTeamId) || isLocked} className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/40 px-6 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Deploy</button>
             </div>
           </form>
           <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -644,18 +727,18 @@ export default function ControlRoom() {
             <span className="text-xs text-zinc-500">{bounties.filter(b => b.status === 'active').length} Active</span>
           </h2>
           <form onSubmit={handleAddBounty} className="space-y-3 mb-4">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input type="text" placeholder="Bounty Objective" value={newBounty.title} onChange={e => setNewBounty({...newBounty, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
-              <input type="number" placeholder="Pts (e.g. 100)" value={newBounty.rewardPoints || ''} onChange={e => setNewBounty({...newBounty, rewardPoints: Number(e.target.value)})} className="w-24 bg-zinc-900 border border-zinc-700 text-purple-400 font-mono rounded-lg px-3 py-2 text-sm text-center" />
-              <select value={newBounty.rewardCardId || ''} onChange={e => setNewBounty({ ...newBounty, rewardCardId: e.target.value })} className="w-1/3 bg-zinc-900 border border-zinc-700 text-purple-300 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest focus:border-purple-500 outline-none">
+              <input type="number" placeholder="Pts (e.g. 100)" value={newBounty.rewardPoints || ''} onChange={e => setNewBounty({...newBounty, rewardPoints: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-purple-400 font-mono rounded-lg px-3 py-2 text-sm text-center" />
+              <select value={newBounty.rewardCardId || ''} onChange={e => setNewBounty({ ...newBounty, rewardCardId: e.target.value })} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-purple-300 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest focus:border-purple-500 outline-none">
                  <option value="none">No Card Drop</option>
                  <option value="random">🎲 Random Card</option>
                  {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
               </select>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
                <input type="text" placeholder="Description & rewards..." value={newBounty.description} onChange={e => setNewBounty({...newBounty, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
-               <button type="submit" disabled={isAddingBounty || !newBounty.title || isLocked} className="bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-4 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Issue</button>
+               <button type="submit" disabled={isAddingBounty || !newBounty.title || isLocked} className="bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-4 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Issue</button>
             </div>
           </form>
           <div className="space-y-2 max-h-40 overflow-y-auto">

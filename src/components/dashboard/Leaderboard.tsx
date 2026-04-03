@@ -155,12 +155,12 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
             const allCards = [
               ...owned.map((id, i) => ({ id, isUsed: false, index: i })), 
               ...used.map((id, i) => ({ id, isUsed: true, index: i }))
-            ].slice(0, 3); // Reduce to 3 cards on mobile
+            ].slice(0, 4); // Show maximum 4 cards
             
             return (
               <>
                  {allCards.map(c => renderCard(c.id, c.isUsed, c.index))}
-                 {[...Array(Math.max(0, 3 - allCards.length))].map((_, i) => (
+                 {[...Array(Math.max(0, 4 - allCards.length))].map((_, i) => (
                    <div key={`empty-${i}`} className="w-[24px] h-[24px] sm:w-[34px] sm:h-[34px] md:w-[38px] md:h-[38px] shrink-0 rounded-md border border-dashed border-zinc-700/40 bg-zinc-900/30 flex items-center justify-center">
                      <span className="text-zinc-600 font-bold opacity-30 text-[10px] sm:text-xs">+</span>
                    </div>
@@ -188,7 +188,7 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
         >
           <AnimatedScore 
             value={team.totalScore}
-            className="text-lg sm:text-2xl md:text-3xl font-mono font-bold block relative z-10 [text-shadow:0_0_8px_rgba(57,255,20,0.5)] text-white"
+            className="text-lg sm:text-2xl md:text-3xl font-mono font-black block relative z-10 text-[#39ff14] [text-shadow:0_0_15px_rgba(57,255,20,0.8)]"
           />
         </motion.div>
       </div>
