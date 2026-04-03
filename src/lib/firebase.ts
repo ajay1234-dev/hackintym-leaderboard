@@ -2,18 +2,18 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// Validate required environment variables
-const requiredEnvVars = [
-  'NEXT_PUBLIC_FIREBASE_API_KEY',
-  'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
-  'NEXT_PUBLIC_FIREBASE_APP_ID'
-];
-
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+// Validate required environment variables statically (Next.js requires explicit literal access)
+const missingEnvVars: string[] = [];
+if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) missingEnvVars.push('NEXT_PUBLIC_FIREBASE_API_KEY');
+if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) missingEnvVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+if (!process.env.NEXT_PUBLIC_FIREBASE_APP_ID) missingEnvVars.push('NEXT_PUBLIC_FIREBASE_APP_ID');
 
 if (missingEnvVars.length > 0 && process.env.NODE_ENV === 'production') {
   console.error('Missing required Firebase environment variables:', missingEnvVars.join(', '));
+  // In Vercel, throw to halt if strictly missing
   throw new Error('Firebase configuration is incomplete. Please check your environment variables.');
+} else if (missingEnvVars.length === 0) {
+  console.log('✅ Firebase Environment Variables Loaded:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 }
 
 const firebaseConfig = {
