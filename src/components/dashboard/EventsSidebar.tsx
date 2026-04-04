@@ -7,6 +7,7 @@ import { Injection, Bounty } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Zap, Target, Clock } from 'lucide-react';
 import { isInjectionActive } from '@/lib/effectEngine';
+import { playBountySound } from '@/lib/soundManager';
 
 export default function EventsSidebar() {
   const [injections, setInjections] = useState<Injection[]>([]);
@@ -31,7 +32,18 @@ export default function EventsSidebar() {
     const qBounties = query(collection(db, 'bounties'));
     const unsubBounties = onSnapshot(qBounties, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Bounty[];
-      setBounties(data.filter(b => b.status === 'active'));
+      const newActive = data.filter(b => b.status === 'active');
+      
+      setBounties(prev => {
+        const prevIds = prev.map(b => b.id);
+        const newIds = newActive.map(b => b.id);
+        const added = newIds.filter(id => !prevIds.includes(id));
+        
+        if (added.length > 0) {
+          playBountySound();
+        }
+        return newActive;
+      });
     });
       setLoading(false);
     return () => {

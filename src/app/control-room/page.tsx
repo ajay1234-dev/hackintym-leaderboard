@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, RefreshCw, Target, Timer } from 'lucide-react';
 import { CARD_ICONS } from '@/lib/icons';
 import { getActiveMultiplier, isFrozen, getActiveGlobalPhenomena } from '@/lib/effectEngine';
+import { playResolveSound } from '@/lib/soundManager';
 
 export default function ControlRoom() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -168,6 +169,16 @@ export default function ControlRoom() {
              } catch (err) { console.error('Failed auto-trigger:', err); }
           }
        }
+
+       // Auto-resolve injections
+       const activeInjs = injections.filter(inj => inj.status === 'active' && inj.expiresAt && inj.expiresAt <= currentTime);
+       for (const inj of activeInjs) {
+         try {
+            await updateDoc(doc(db, 'injections', inj.id), { status: 'resolved' });
+            await logActivity('system', `Global Event Ended: ${inj.title}`, 'SYSTEM');
+         } catch (err) { console.error('Failed auto-resolve:', err); }
+       }
+
     }, 1000);
     
     return () => clearInterval(interval);
@@ -230,6 +241,26 @@ export default function ControlRoom() {
       showToast('Global timer cleared!', 'success');
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const handleForceResolveAll = async () => {
+    if (isLocked) return;
+    const activeInjs = injections.filter(i => i.status === 'active');
+    if (activeInjs.length === 0) return showToast("No active events to resolve.", "info");
+
+    if (!confirm(`🚨 EMERGENCY OVERRIDE: Force resolve ${activeInjs.length} active events?`)) return;
+
+    try {
+       for (const inj of activeInjs) {
+          await updateDoc(doc(db, 'injections', inj.id), { status: 'resolved' });
+       }
+       await logActivity('system', `ADMIN FORCE RESOLVED ALL EVENTS`, 'SYSTEM');
+       playResolveSound();
+       showToast("All events Force Resolved!", "success");
+    } catch (e) {
+       console.error(e);
+       showToast("Failed to resolve all", "info");
     }
   };
 
@@ -671,8 +702,11 @@ export default function ControlRoom() {
               <input type="number" min="0" max="59" placeholder="SS" value={timerSS} onChange={e => setTimerSS(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
             </div>
             <button type="submit" disabled={(!timerHH && !timerMM && !timerSS) || isLocked} className="bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14]/50 text-[#39ff14] font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Deploy</button>
-            <button type="button" onClick={handleClearGlobalTimer} disabled={isLocked} className="bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 text-red-500 font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Clear</button>
+            <button type="button" onClick={handleClearGlobalTimer} disabled={isLocked} className="bg-zinc-500/20 hover:bg-zinc-500/40 border border-zinc-500/50 text-zinc-400 font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Clear</button>
          </form>
+         <button type="button" onClick={handleForceResolveAll} disabled={isLocked} className="mt-4 md:mt-0 bg-red-500 hover:bg-red-600 text-white font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.5)] md:ml-4">
+             🚨 Force Resolve All Events
+          </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -6,6 +6,7 @@ import { GlobalEffectsProvider } from '@/components/dashboard/GlobalEffectsConte
 import TopActivityBar from '@/components/dashboard/TopActivityBar';
 import GlobalEventBanner from '@/components/dashboard/GlobalEventBanner';
 import GlobalTimer from '@/components/dashboard/GlobalTimer';
+import ActiveInjectionsPanel from '@/components/dashboard/ActiveInjectionsPanel';
 
 export default function DashboardPage() {
   return (
@@ -22,8 +23,9 @@ export default function DashboardPage() {
           </h2>
         </div>
 
-        {/* Center Column: Global Timer */}
-        <div className="flex justify-center items-center w-full">
+        {/* Center Column: Global Timer & Injections */}
+        <div className="flex justify-center items-center w-full gap-4 relative">
+          <ActiveInjectionsPanel />
           <GlobalTimer />
         </div>
 

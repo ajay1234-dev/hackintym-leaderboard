@@ -1,60 +1,39 @@
 let audioEnabled = false;
 let lastPlayed = 0;
+let currentSoundPriority = 0;
 
 export const enableAudio = () => {
   audioEnabled = true;
 };
 
-const play = (src: string, volume = 0.5) => {
+const playWithPriority = (src: string, volume = 0.5, priority = 1) => {
   if (!audioEnabled || typeof window === 'undefined') return;
 
   const now = Date.now();
-  if (now - lastPlayed < 200) return; // micro anti-spam
+  if (priority === currentSoundPriority && now - lastPlayed < 200) return; // micro anti-spam for same priority
 
-  lastPlayed = now;
+  if (priority >= currentSoundPriority) {
+    currentSoundPriority = priority;
+    lastPlayed = now;
 
-  const audio = new Audio(src);
-  audio.volume = volume;
-  audio.play().catch(() => {});
+    setTimeout(() => {
+      if (currentSoundPriority === priority) currentSoundPriority = 0;
+    }, 1500);
+
+    const audio = new Audio(src);
+    audio.volume = volume;
+    audio.play().catch(() => {});
+  }
 };
 
-export const playCelebrationSound = () => {
-  play("/sounds/celebration.mp3", 0.6);
-};
-
-export const playRankChangeSound = () => {
-  play("/sounds/rank-up.mp3", 0.7);
-};
-
-export const playScoreSound = () => {
-  play("/sounds/score.mp3", 0.4);
-};
-
-export const playCardSound = () => {
-  play("/sounds/card.mp3", 0.6);
-};
-
-export const playBountySound = () => {
-  play("/sounds/bounty.mp3", 0.7);
-};
-
-export const playInjectionSound = () => {
-  play("/sounds/alert.mp3", 0.65);
-};
-
-export const playActivitySound = () => {
-  play("/sounds/activity.mp3", 0.3);
-};
-
-// Timer Sounds
-export const playHourAlertSound = () => {
-  play("/sounds/hour-alert.mp3", 0.6);
-};
-
-export const playTickingSound = () => {
-  play("/sounds/ticking.mp3", 0.5);
-};
-
-export const playTimeUpSound = () => {
-  play("/sounds/time-up.mp3", 0.8);
-};
+export const playCelebrationSound = () => playWithPriority("/sounds/celebration.mp3", 0.6, 2);
+export const playRankChangeSound = () => playWithPriority("/sounds/rank-up.mp3", 0.7, 2);
+export const playScoreSound = () => playWithPriority("/sounds/score.mp3", 0.4, 1);
+export const playCardSound = () => playWithPriority("/sounds/card.mp3", 0.6, 2);
+export const playBountySound = () => playWithPriority("/sounds/bounty.mp3", 0.7, 2);
+export const playInjectionSound = () => playWithPriority("/sounds/injection-alert.mp3", 0.65, 3);
+export const playResolveSound = () => playWithPriority("/sounds/resolve.mp3", 0.65, 3);
+export const playActivitySound = () => playWithPriority("/sounds/activity.mp3", 0.3, 1);
+export const playHourAlertSound = () => playWithPriority("/sounds/hour-alert.mp3", 0.6, 3);
+export const playTickingSound = () => playWithPriority("/sounds/ticking.mp3", 0.5, 1);
+export const playTimeUpSound = () => playWithPriority("/sounds/time-up.mp3", 0.8, 3);
