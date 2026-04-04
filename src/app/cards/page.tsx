@@ -55,13 +55,13 @@ export default function CardsLibrary() {
           <h1 className="text-2xl md:text-5xl font-black uppercase drop-shadow-[0_0_15px_rgba(57,255,20,0.5)] text-[#39ff14]">Power Cards</h1>
           <p className="text-zinc-400 text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1">Registry Protocol</p>
         </div>
-        <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white border border-zinc-700 hover:border-[#39ff14] hover:bg-[#39ff14]/10 transition-all py-2.5 px-5 rounded-lg text-sm font-black uppercase tracking-widest shadow-sm">
+        <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white border border-zinc-700 hover:border-[#39ff14] hover:bg-[#39ff14]/10 transition-all py-2.5 px-5 rounded-lg text-sm font-black uppercase tracking-widest shadow-sm w-full md:w-auto justify-center md:justify-start">
           <ArrowLeft size={16} /> Dashboard
         </Link>
       </header>
 
       {/* Tabs Layout */}
-      <div className="flex gap-2 p-2 bg-zinc-900/80 backdrop-blur-md rounded-2xl border border-zinc-800 overflow-x-auto relative z-10">
+      <div className="flex gap-2 p-2 bg-zinc-900/80 backdrop-blur-md rounded-2xl border border-zinc-800 overflow-x-auto relative z-10 scrollbar-none snap-x w-full">
         {CATEGORIES.map((tab) => {
            const isActive = activeTab === tab;
            let tabColors = '';
@@ -73,7 +73,7 @@ export default function CardsLibrary() {
              <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`relative px-6 py-3 rounded-xl font-black tracking-widest text-sm uppercase transition-all whitespace-nowrap flex-1 lg:flex-none ${tabColors} ${isActive ? 'scale-[1.02] drop-shadow-[0_0_8px_currentColor]' : ''}`}
+                className={`relative px-6 py-3 rounded-xl font-black tracking-widest text-sm uppercase transition-all whitespace-nowrap shrink-0 min-w-[120px] sm:flex-1 lg:flex-none snap-center ${tabColors} ${isActive ? 'scale-[1.02] drop-shadow-[0_0_8px_currentColor]' : ''}`}
              >
                 {isActive && (
                    <motion.div

@@ -641,7 +641,7 @@ export default function ControlRoom() {
           <p className="text-zinc-400 text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1">Prime Directive Override</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+        <div className="flex flex-col w-full md:w-auto gap-4 items-stretch md:items-center">
           {/* Action Bar */}
           <div className="flex items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800">
              <div className="relative">
@@ -688,25 +688,27 @@ export default function ControlRoom() {
          )}
       </AnimatePresence>
 
-      <div className="mb-6 glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="mb-6 glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
          <div>
             <h2 className="text-lg font-bold text-[#39ff14] uppercase flex items-center gap-2"><Timer className="w-5 h-5"/> Master Global Timer</h2>
-            <p className="text-sm text-zinc-400">Set the massive countdown visible on all participant screens.</p>
+            <p className="text-sm text-zinc-400">Set the massive countdown visible on participant screens.</p>
          </div>
-         <form onSubmit={handleSetGlobalTimer} className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex gap-1 items-center bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2">
-              <input type="number" min="0" placeholder="HH" value={timerHH} onChange={e => setTimerHH(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
-              <span className="text-zinc-500 font-bold">:</span>
-              <input type="number" min="0" max="59" placeholder="MM" value={timerMM} onChange={e => setTimerMM(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
-              <span className="text-zinc-500 font-bold">:</span>
-              <input type="number" min="0" max="59" placeholder="SS" value={timerSS} onChange={e => setTimerSS(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
-            </div>
-            <button type="submit" disabled={(!timerHH && !timerMM && !timerSS) || isLocked} className="bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14]/50 text-[#39ff14] font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Deploy</button>
-            <button type="button" onClick={handleClearGlobalTimer} disabled={isLocked} className="bg-zinc-500/20 hover:bg-zinc-500/40 border border-zinc-500/50 text-zinc-400 font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Clear</button>
-         </form>
-         <button type="button" onClick={handleForceResolveAll} disabled={isLocked} className="mt-4 md:mt-0 bg-red-500 hover:bg-red-600 text-white font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.5)] md:ml-4">
-             🚨 Force Resolve All Events
-          </button>
+         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+           <form onSubmit={handleSetGlobalTimer} className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto">
+              <div className="flex gap-1 items-center bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 flex-shrink-0">
+                <input type="number" min="0" placeholder="HH" value={timerHH} onChange={e => setTimerHH(e.target.value)} className="bg-transparent text-white w-6 md:w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
+                <span className="text-zinc-500 font-bold">:</span>
+                <input type="number" min="0" max="59" placeholder="MM" value={timerMM} onChange={e => setTimerMM(e.target.value)} className="bg-transparent text-white w-6 md:w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
+                <span className="text-zinc-500 font-bold">:</span>
+                <input type="number" min="0" max="59" placeholder="SS" value={timerSS} onChange={e => setTimerSS(e.target.value)} className="bg-transparent text-white w-6 md:w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
+              </div>
+              <button type="submit" disabled={(!timerHH && !timerMM && !timerSS) || isLocked} className="flex-1 sm:flex-none bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14]/50 text-[#39ff14] font-bold uppercase tracking-widest px-4 md:px-6 py-2 rounded-lg transition-colors disabled:opacity-50 text-xs md:text-sm whitespace-nowrap">Deploy</button>
+              <button type="button" onClick={handleClearGlobalTimer} disabled={isLocked} className="flex-1 sm:flex-none bg-zinc-500/20 hover:bg-zinc-500/40 border border-zinc-500/50 text-zinc-400 font-bold uppercase tracking-widest px-4 md:px-6 py-2 rounded-lg transition-colors disabled:opacity-50 text-xs md:text-sm whitespace-nowrap">Clear</button>
+           </form>
+           <button type="button" onClick={handleForceResolveAll} disabled={isLocked} className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.5)] text-xs md:text-sm whitespace-nowrap">
+               🚨 Force Resolve All
+            </button>
+         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
