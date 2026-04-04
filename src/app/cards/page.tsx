@@ -49,13 +49,13 @@ export default function CardsLibrary() {
   }, [cards]);
 
   return (
-    <main className="min-h-screen p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 md:space-y-8">
+    <main className="min-h-screen py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 md:space-y-8 overflow-x-hidden w-full">
       <header className="glass-panel p-4 md:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border neon-border z-10 relative shadow-[0_0_30px_rgba(57,255,20,0.05)]">
         <div>
           <h1 className="text-2xl md:text-5xl font-black uppercase drop-shadow-[0_0_15px_rgba(57,255,20,0.5)] text-[#39ff14]">Power Cards</h1>
           <p className="text-zinc-400 text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1">Registry Protocol</p>
         </div>
-        <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white border border-zinc-700 hover:border-[#39ff14] hover:bg-[#39ff14]/10 transition-all py-2.5 px-5 rounded-lg text-sm font-black uppercase tracking-widest shadow-sm w-full md:w-auto justify-center md:justify-start">
+        <Link href="/" className="flex items-center justify-center gap-2 text-zinc-400 hover:text-white border border-zinc-700 hover:border-[#39ff14] hover:bg-[#39ff14]/10 transition-all py-2.5 px-4 sm:px-5 rounded-lg text-xs sm:text-sm font-black uppercase tracking-widest shadow-sm w-full md:w-auto h-12 md:h-auto shrink-0">
           <ArrowLeft size={16} /> Dashboard
         </Link>
       </header>
@@ -106,7 +106,7 @@ export default function CardsLibrary() {
                animate={{ opacity: 1, y: 0 }}
                exit={{ opacity: 0, y: -30 }}
                transition={{ duration: 0.4 }}
-               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full"
+               className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 w-full"
             >
                {filteredCards.length === 0 && (
                  <div className="col-span-full flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-zinc-800 rounded-3xl bg-zinc-900/30">
@@ -140,7 +140,7 @@ export default function CardsLibrary() {
                      animate={{ opacity: 1, scale: 1 }}
                      transition={{ duration: 0.3, delay: i * 0.05 }}
                      key={card.id} 
-                     className={`glass-panel p-6 rounded-3xl border relative overflow-hidden group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default ${borderClass} ${cardGlowEffect}`}
+                     className={`w-full h-auto aspect-[3/4] flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative overflow-hidden group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default ${borderClass} ${cardGlowEffect}`}
                    >
                      {/* Background Glow */}
                      <div className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-20 group-hover:opacity-60 transition-opacity duration-500 ${glowClass}`}></div>
@@ -150,22 +150,24 @@ export default function CardsLibrary() {
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out z-20 pointer-events-none"></div>
                      )}
                      
-                     <div className="flex flex-col h-full relative z-10">
-                        <div className="flex items-start justify-between mb-6">
-                           <div className={`text-4xl p-3.5 rounded-2xl border bg-zinc-950 shadow-inner group-hover:scale-110 transition-transform ${textClass}`}>
-                             <IconComponent className="w-8 h-8 drop-shadow-[0_0_8px_currentColor]" />
+                     <div className="flex flex-col h-full relative z-10 w-full overflow-hidden">
+                        <div className="flex items-start justify-between mb-4 sm:mb-6 shrink-0">
+                           <div className={`text-3xl sm:text-4xl p-2.5 sm:p-3.5 rounded-2xl border bg-zinc-950 shadow-inner group-hover:scale-110 transition-transform shrink-0 ${textClass}`}>
+                             <IconComponent className="w-6 h-6 sm:w-8 sm:h-8 drop-shadow-[0_0_8px_currentColor]" />
                            </div>
-                           <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded border shadow-sm ${textClass}`}>
+                           <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded border shadow-sm shrink-0 whitespace-nowrap ${textClass}`}>
                              {card.type}
                            </span>
                         </div>
                         
-                        <h3 className="text-xl font-black text-white mb-3 uppercase tracking-tight leading-tight">{card.name}</h3>
-                        <p className="text-sm text-zinc-400 mb-8 flex-1 leading-relaxed font-medium">{card.description}</p>
+                        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                           <h3 className="text-lg sm:text-xl font-black text-white mb-2 sm:mb-3 uppercase tracking-tight leading-tight truncate shrink-0">{card.name}</h3>
+                           <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-8 flex-1 leading-relaxed font-medium line-clamp-4">{card.description}</p>
+                        </div>
                         
-                        <div className="pt-4 border-t border-zinc-800">
-                           <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 font-bold">Effect Sequence</div>
-                           <div className={`text-sm font-mono font-black tracking-wider px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 ${textClass.split(' ')[0]}`}>
+                        <div className="pt-4 border-t border-zinc-800 shrink-0 mt-auto">
+                           <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 font-bold truncate">Effect Sequence</div>
+                           <div className={`text-xs sm:text-sm font-mono font-black tracking-wider px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-zinc-950 border border-zinc-800 truncate w-full ${textClass.split(' ')[0]}`}>
                              {card.effect}
                            </div>
                         </div>

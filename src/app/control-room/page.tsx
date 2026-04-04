@@ -602,7 +602,7 @@ export default function ControlRoom() {
   const filteredTeams = teams.filter(t => t.teamName.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <main className="min-h-screen p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 lg:space-y-8 relative">
+    <main className="min-h-screen py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 lg:space-y-8 relative overflow-x-hidden w-full">
       
       {/* TOAST SYSTEM */}
       <div className="fixed top-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
@@ -635,16 +635,16 @@ export default function ControlRoom() {
 
       <header className="glass-panel p-6 rounded-2xl border neon-border flex flex-col md:flex-row gap-4 md:items-center justify-between shadow-[0_0_30px_rgba(57,255,20,0.05)]">
         <div>
-          <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tighter" style={{ color: '#39ff14', textShadow: '0 0 20px rgba(57, 255, 20, 0.4)' }}>
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black uppercase tracking-tighter" style={{ color: '#39ff14', textShadow: '0 0 20px rgba(57, 255, 20, 0.4)' }}>
             Control Room
           </h1>
-          <p className="text-zinc-400 text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1">Prime Directive Override</p>
+          <p className="text-zinc-400 text-[10px] sm:text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1 truncate">Prime Directive Override</p>
         </div>
         
-        <div className="flex flex-col w-full md:w-auto gap-4 items-stretch md:items-center">
+        <div className="flex flex-col xl:flex-row w-full xl:w-auto gap-4 items-stretch xl:items-center">
           {/* Action Bar */}
-          <div className="flex items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800">
-             <div className="relative">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800 w-full sm:w-auto">
+             <div className="relative w-full sm:w-auto">
                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
                <input 
                  type="text" 
@@ -663,12 +663,12 @@ export default function ControlRoom() {
                  : 'bg-zinc-800/50 text-zinc-400 border-transparent hover:text-white'
                }`}
              >
-               {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+               {isLocked ? <Lock className="w-4 h-4 shrink-0" /> : <Unlock className="w-4 h-4 shrink-0" />}
                {isLocked ? 'Locked' : 'Lock'}
              </button>
           </div>
 
-          <button onClick={handleLogout} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2.5 rounded-lg font-bold uppercase tracking-widest text-xs transition-colors shadow-sm">
+          <button onClick={handleLogout} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2.5 rounded-lg font-bold uppercase tracking-widest text-xs transition-colors shadow-sm w-full sm:w-auto text-center shrink-0">
             Exit
           </button>
         </div>
