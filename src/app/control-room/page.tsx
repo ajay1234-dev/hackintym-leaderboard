@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, arrayUnion, arrayRemove, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
 import { Team, Card, Injection, Bounty } from '@/types';
 import { syncSession } from '@/app/actions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, RefreshCw, Target } from 'lucide-react';
+import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, RefreshCw, Target, Timer } from 'lucide-react';
 import { CARD_ICONS } from '@/lib/icons';
 import { getActiveMultiplier, isFrozen, getActiveGlobalPhenomena } from '@/lib/effectEngine';
 
@@ -32,6 +32,7 @@ export default function ControlRoom() {
 
   // Assign state mapped by team id
   const [selectedCards, setSelectedCards] = useState<Record<string, string>>({});
+  const [activeCardTabs, setActiveCardTabs] = useState<Record<string, string>>({});
 
   // Events State
   const [newInjection, setNewInjection] = useState<Partial<Injection>>({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '', eventType: 'POINTS', duration: 0, multiplier: 2 });
@@ -50,6 +51,12 @@ export default function ControlRoom() {
   // UX Refinements: Lock & Search
   const [isLocked, setIsLocked] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Master Timer State
+  const [timerHH, setTimerHH] = useState('');
+  const [timerMM, setTimerMM] = useState('');
+  const [timerSS, setTimerSS] = useState('');
+  const [globalEndTime, setGlobalEndTime] = useState<number | null>(null);
 
   // Toast System
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'info' }[]>([]);
@@ -87,6 +94,14 @@ export default function ControlRoom() {
       setBounties(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Bounty[]);
     });
 
+    const unsubscribeGlobalTimer = onSnapshot(doc(db, 'globalState', 'timer'), (snapshot) => {
+      if (snapshot.exists() && snapshot.data().endTime) {
+        setGlobalEndTime(snapshot.data().endTime);
+      } else {
+        setGlobalEndTime(null);
+      }
+    });
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
         // If Firebase Auth is missing but Middleware let them in, it means the cookie is stale.
@@ -99,9 +114,65 @@ export default function ControlRoom() {
 
     return () => { 
       unsubscribeTeams(); unsubscribeCards(); unsubscribeAuth(); 
-      unsubscribeInjections(); unsubscribeBounties();
+      unsubscribeBounties();
+      unsubscribeGlobalTimer();
+      unsubscribeAuth();
     };
-  }, [router]);
+  }, []);
+
+  // --- 🔥 LIVE EVENT ENGINE BACKGROUND LOOP ---
+  useEffect(() => {
+    if (!globalEndTime) return;
+    
+    const interval = setInterval(async () => {
+       const currentTime = Date.now();
+       const remainingSeconds = Math.max(0, Math.floor((globalEndTime - currentTime) / 1000));
+       
+       // Handle auto-trigger injections
+       const stagedInjections = injections.filter(inj => inj.status === 'staged' && !inj.isTriggered && inj.triggerAtRemainingTime !== undefined);
+       
+       for (const inj of stagedInjections) {
+          if (remainingSeconds <= inj.triggerAtRemainingTime!) {
+             try {
+                const updates: Partial<Injection> = {
+                   status: 'active',
+                   isTriggered: true,
+                };
+                if (inj.duration && inj.duration > 0) {
+                   updates.expiresAt = Date.now() + (inj.duration * 1000);
+                }
+                
+                // --- PAYLOAD EXECUTION ---
+                if (inj.eventType === 'POINTS' && (inj.points || 0) !== 0) {
+                   if (inj.type === 'global') {
+                      for (const team of teams) {
+                         const currentScore = Number(team.bonusPoints) || 0;
+                         await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + inj.points! });
+                      }
+                   } else if (inj.type === 'selective' && inj.targetTeamId) {
+                      const targetTeam = teams.find(t => t.id === inj.targetTeamId);
+                      if (targetTeam) {
+                         const currentScore = Number(targetTeam.bonusPoints) || 0;
+                         await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + inj.points! });
+                      }
+                   }
+                }
+                const targetTeam = inj.targetTeamId ? teams.find(t => t.id === inj.targetTeamId) : null;
+                if (inj.eventType === 'CARD_DROP' && inj.rewardCardId && targetTeam) {
+                   // (Auto card dropping skipped in interval to prevent heavy DB duplication issues, we'll only do standard point payloads)
+                   // But if needed, card logic goes here.
+                }
+
+                await updateDoc(doc(db, 'injections', inj.id), updates);
+                logActivity('injection', `Auto-Triggered Phenomenon: ${inj.title}`, 'SYSTEM');
+             } catch (err) { console.error('Failed auto-trigger:', err); }
+          }
+       }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [globalEndTime, injections, teams]);
+  // ---------------------------------------------
 
   const logActivity = async (
     actionType: 'score' | 'card' | 'bounty' | 'injection' | 'system',
@@ -119,6 +190,47 @@ export default function ControlRoom() {
         timestamp: Date.now() 
       });
     } catch (err) { console.error(err); }
+  };
+
+  const handleSetGlobalTimer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLocked) return;
+    
+    const h = parseInt(timerHH || '0', 10);
+    const m = parseInt(timerMM || '0', 10);
+    const s = parseInt(timerSS || '0', 10);
+    
+    if (isNaN(h) || isNaN(m) || isNaN(s)) return;
+    const totalSeconds = (h * 3600) + (m * 60) + s;
+    if (totalSeconds <= 0) return;
+    
+    try {
+      await setDoc(doc(db, 'globalState', 'timer'), {
+        endTime: Date.now() + totalSeconds * 1000,
+        startTime: Date.now(),
+        duration: totalSeconds,
+        isActive: true
+      }, { merge: true });
+      showToast(`Master Timer started for ${totalSeconds} seconds!`, 'success');
+      setTimerHH('');
+      setTimerMM('');
+      setTimerSS('');
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to deploy Timer', 'info');
+    }
+  };
+
+  const handleClearGlobalTimer = async () => {
+    if (isLocked) return;
+    try {
+      await setDoc(doc(db, 'globalState', 'timer'), {
+        endTime: null
+      }, { merge: true });
+      showToast('Global timer cleared!', 'success');
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleAddTeam = async (e: React.FormEvent) => {
@@ -288,17 +400,26 @@ export default function ControlRoom() {
     
     setIsAddingInjection(true);
     try {
+      const isAutoDeploy = (newInjection.triggerAtRemainingTime && newInjection.triggerAtRemainingTime > 0);
+      const isDeployingNow = !isAutoDeploy;
+
       const injectionPayload: Partial<Injection> = {
          title: newInjection.title,
          description: newInjection.description,
-         status: 'active',
+         status: isAutoDeploy ? 'staged' : 'active',
          type: newInjection.type,
          eventType: newInjection.eventType
       };
 
+      if (isAutoDeploy) {
+         injectionPayload.triggerAtRemainingTime = newInjection.triggerAtRemainingTime;
+      }
+
       if (newInjection.duration && newInjection.duration > 0) {
          injectionPayload.duration = newInjection.duration;
-         injectionPayload.expiresAt = Date.now() + newInjection.duration * 1000;
+         if (isDeployingNow) {
+            injectionPayload.expiresAt = Date.now() + newInjection.duration * 1000;
+         }
       }
       if (newInjection.type === 'selective') {
          injectionPayload.targetTeamId = newInjection.targetTeamId;
@@ -345,25 +466,30 @@ export default function ControlRoom() {
 
       await addDoc(collection(db, 'injections'), injectionPayload);
       
-      if (newInjection.eventType === 'POINTS') {
-         if (newInjection.type === 'global' && newInjection.points !== 0) {
-            for (const team of teams) {
-              const currentScore = Number(team.bonusPoints) || 0;
-              await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + newInjection.points! });
-            }
-         } else if (newInjection.type === 'selective' && newInjection.points !== 0) {
-            const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
-            if (targetTeam) {
-               const currentScore = Number(targetTeam.bonusPoints) || 0;
-               await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + newInjection.points! });
+      // ONLY apply immediate effects if NOT staged
+      if (isDeployingNow) {
+         if (newInjection.eventType === 'POINTS') {
+            if (newInjection.type === 'global' && newInjection.points !== 0) {
+               for (const team of teams) {
+                 const currentScore = Number(team.bonusPoints) || 0;
+                 await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + newInjection.points! });
+               }
+            } else if (newInjection.type === 'selective' && newInjection.points !== 0) {
+               const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
+               if (targetTeam) {
+                  const currentScore = Number(targetTeam.bonusPoints) || 0;
+                  await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + newInjection.points! });
+               }
             }
          }
+         await logActivity('injection', actionMsg, newInjection.type === 'selective' ? teams.find(t => t.id === newInjection.targetTeamId)?.teamName : undefined, newInjection.points || 0);
+         showToast(`Injection deployed: ${newInjection.title}`, 'success');
+      } else {
+         await logActivity('injection', `Phenomenon staged: ${newInjection.title} (Trigger @ ${newInjection.triggerAtRemainingTime}s)`, 'SYSTEM');
+         showToast(`Injection staged for timer!`, 'success');
       }
-
-      await logActivity('injection', actionMsg, newInjection.type === 'selective' ? teams.find(t => t.id === newInjection.targetTeamId)?.teamName : undefined, newInjection.points || 0);
-      showToast(`Injection deployed: ${newInjection.title}`, 'success');
       
-      setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '', eventType: 'POINTS', duration: 0, multiplier: 2 });
+      setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '', eventType: 'POINTS', duration: 0, multiplier: 2, triggerAtRemainingTime: undefined });
     } finally { setIsAddingInjection(false); }
   };
 
@@ -523,13 +649,31 @@ export default function ControlRoom() {
                initial={{ opacity: 0, y: -20 }}
                animate={{ opacity: 1, y: 0 }}
                exit={{ opacity: 0, y: -20 }}
-               className="w-full bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(239,68,68,0.15)]"
+               className="w-full bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(239,68,68,0.15)] mb-6"
             >
                <Lock className="w-5 h-5 drop-shadow-[0_0_8px_currentColor]" />
                <span className="font-black uppercase tracking-[0.2em] text-sm drop-shadow-[0_0_8px_currentColor]">Leaderboard Frozen: All Actions Suspended</span>
             </motion.div>
          )}
       </AnimatePresence>
+
+      <div className="mb-6 glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+         <div>
+            <h2 className="text-lg font-bold text-[#39ff14] uppercase flex items-center gap-2"><Timer className="w-5 h-5"/> Master Global Timer</h2>
+            <p className="text-sm text-zinc-400">Set the massive countdown visible on all participant screens.</p>
+         </div>
+         <form onSubmit={handleSetGlobalTimer} className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex gap-1 items-center bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2">
+              <input type="number" min="0" placeholder="HH" value={timerHH} onChange={e => setTimerHH(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
+              <span className="text-zinc-500 font-bold">:</span>
+              <input type="number" min="0" max="59" placeholder="MM" value={timerMM} onChange={e => setTimerMM(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
+              <span className="text-zinc-500 font-bold">:</span>
+              <input type="number" min="0" max="59" placeholder="SS" value={timerSS} onChange={e => setTimerSS(e.target.value)} className="bg-transparent text-white w-8 text-center placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" disabled={isLocked} />
+            </div>
+            <button type="submit" disabled={(!timerHH && !timerMM && !timerSS) || isLocked} className="bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14]/50 text-[#39ff14] font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Deploy</button>
+            <button type="button" onClick={handleClearGlobalTimer} disabled={isLocked} className="bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 text-red-500 font-bold uppercase tracking-widest px-6 py-2 rounded-lg transition-colors disabled:opacity-50">Clear</button>
+         </form>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Add Team */}
@@ -701,6 +845,12 @@ export default function ControlRoom() {
 
             <div className="flex flex-col sm:flex-row gap-3">
                <input type="text" placeholder="Description & requirements..." value={newInjection.description} onChange={e => setNewInjection({...newInjection, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
+               
+               <div className="flex-1 w-full flex gap-3 relative">
+                  <div className="absolute top-1/2 -translate-y-1/2 left-3 text-[10px] uppercase font-bold text-zinc-500 pointer-events-none">Auto-Trigger @</div>
+                  <input type="number" placeholder="Seconds empty=now" value={newInjection.triggerAtRemainingTime || ''} onChange={e => setNewInjection({...newInjection, triggerAtRemainingTime: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg pl-28 pr-3 py-2 text-sm font-bold" />
+               </div>
+
                <button type="submit" disabled={isAddingInjection || !newInjection.title || (newInjection.type === 'selective' && !newInjection.targetTeamId) || isLocked} className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/40 px-6 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Deploy</button>
             </div>
           </form>
@@ -823,51 +973,110 @@ export default function ControlRoom() {
                         {total}
                      </div>
 
-                     {/* Card Actions */}
-                     <div className="w-full border-l border-zinc-800 pl-4 space-y-2 flex flex-col justify-center">
-                       {/* Available Mini-Cards (Scrollable row) */}
-                       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-zinc-700 w-full pr-2">
-                         {cards.map(c => {
-                           const IconComp = CARD_ICONS[c.icon as keyof typeof CARD_ICONS] || CARD_ICONS.Zap;
-                           const isSelected = selectedCards[team.id] === c.id;
-                           return (
-                             <div key={c.id} className="flex-shrink-0 flex flex-row items-center gap-1">
-                               <motion.button 
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  onClick={() => setSelectedCards(prev => ({ ...prev, [team.id]: isSelected ? '' : c.id }))} 
-                                  disabled={isLocked}
-                                  className={`flex items-center gap-1.5 rounded px-2 py-1 transition-colors border ${isSelected ? 'bg-blue-900/60 border-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 hover:border-blue-500/50 text-zinc-400'}`}
-                                  title={`Select ${c.name}`}
-                               >
-                                 <IconComp className="w-4 h-4" />
-                                 <span className={`text-[10px] uppercase font-bold max-w-[60px] truncate ${isSelected ? 'text-white' : 'text-zinc-400'}`}>{c.name}</span>
-                               </motion.button>
-                               <AnimatePresence>
-                                 {isSelected && (
-                                   <motion.button
-                                      initial={{ opacity: 0, scale: 0.5, width: 0 }}
-                                      animate={{ opacity: 1, scale: 1, width: 'auto' }}
-                                      exit={{ opacity: 0, scale: 0.5, width: 0 }}
-                                      onClick={() => {
-                                        handleAssignCard(team.id, team.teamName, c.id);
-                                        setSelectedCards(prev => {
-                                          const next = {...prev};
-                                          delete next[team.id];
-                                          return next;
-                                        });
-                                      }}
-                                      className="bg-blue-500 hover:bg-blue-400 text-white text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded shadow-[0_0_10px_rgba(59,130,246,0.8)]"
-                                   >
-                                     GIVE
-                                   </motion.button>
-                                 )}
-                               </AnimatePresence>
-                             </div>
-                           );
-                         })}
-                         {cards.length === 0 && <span className="text-[10px] text-zinc-600 italic">No cards inside Deck Builder</span>}
-                       </div>
+                      {/* Card Actions */}
+                      <div className="w-full border-l border-zinc-800 pl-4 space-y-2 flex flex-col justify-center">
+                        {/* Available Mini-Cards (Tabbed categorized) */}
+                        <div className="flex flex-col gap-2 w-full pr-2">
+                          {(() => {
+                            const activeTab = activeCardTabs[team.id] || 'COMMON';
+                            const setTab = (tab: string) => setActiveCardTabs(prev => ({...prev, [team.id]: tab}));
+                            
+                            const common = cards.filter(c => c.type === 'COMMON');
+                            const rare = cards.filter(c => c.type === 'RARE');
+                            const leg = cards.filter(c => c.type === 'LEGENDARY');
+
+                            const activeCards = activeTab === 'COMMON' ? common : activeTab === 'RARE' ? rare : leg;
+
+                            const renderTab = (tabName: string, label: string, colorClass: string, count: number) => {
+                              const isActive = activeTab === tabName;
+                              return (
+                                <button 
+                                  type="button" 
+                                  onClick={() => setTab(tabName)}
+                                  className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? `${colorClass} shadow-md scale-[1.03] border` : 'bg-zinc-900 border border-zinc-800 text-zinc-500 opacity-50 hover:opacity-100 hover:bg-zinc-800'}`}
+                                >
+                                  {label} ({count})
+                                </button>
+                              );
+                            };
+
+                            const renderCardBtn = (c: Card) => {
+                              const IconComp = CARD_ICONS[c.icon as keyof typeof CARD_ICONS] || CARD_ICONS.Zap;
+                              const isSelected = selectedCards[team.id] === c.id;
+                              
+                              // Rarity glow inside card
+                              let glow = 'shadow-[0_0_10px_rgba(59,130,246,0.5)] bg-blue-900/60 border-blue-500'; // Default selection
+                              let rarityBorder = activeTab === 'COMMON' ? 'hover:border-[#39ff14]/50' : activeTab === 'RARE' ? 'hover:border-purple-500/50' : 'hover:border-yellow-500/50';
+
+                              return (
+                                <div key={c.id} className="flex-shrink-0 flex flex-row items-center gap-1">
+                                  <motion.button 
+                                     whileHover={{ scale: 1.05 }}
+                                     whileTap={{ scale: 0.95 }}
+                                     onClick={() => setSelectedCards(prev => ({ ...prev, [team.id]: isSelected ? '' : c.id }))} 
+                                     disabled={isLocked}
+                                     className={`flex items-center gap-1.5 rounded px-2 py-1 transition-all border ${isSelected ? glow + ' text-white' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-400 ' + rarityBorder}`}
+                                     title={`Select ${c.name}`}
+                                  >
+                                    <IconComp className="w-4 h-4" />
+                                    <span className={`text-[10px] uppercase font-bold max-w-[80px] truncate ${isSelected ? 'text-white' : 'text-zinc-400'}`}>{c.name}</span>
+                                  </motion.button>
+                                  <AnimatePresence>
+                                    {isSelected && (
+                                      <motion.button
+                                         initial={{ opacity: 0, scale: 0.5, width: 0 }}
+                                         animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                                         exit={{ opacity: 0, scale: 0.5, width: 0 }}
+                                         onClick={() => {
+                                           handleAssignCard(team.id, team.teamName, c.id);
+                                           setSelectedCards(prev => {
+                                             const next = {...prev};
+                                             delete next[team.id];
+                                             return next;
+                                           });
+                                         }}
+                                         className="bg-blue-500 hover:bg-blue-400 text-white text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded shadow-[0_0_10px_rgba(59,130,246,0.8)] z-10"
+                                      >
+                                        GIVE
+                                      </motion.button>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            };
+
+                            return (
+                              <>
+                                {/* Tabs Row */}
+                                <div className="flex gap-2">
+                                  {renderTab('COMMON', 'Common', 'bg-[#39ff14]/10 border-[#39ff14] text-[#39ff14] shadow-[0_0_10px_rgba(57,255,20,0.2)]', common.length)}
+                                  {renderTab('RARE', 'Rare', 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]', rare.length)}
+                                  {renderTab('LEGENDARY', 'Legendary', 'bg-yellow-500/10 border-yellow-500 text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.2)]', leg.length)}
+                                </div>
+
+                                {/* Active Cards Grid */}
+                                <div className="relative overflow-x-auto pb-1 mt-1 scrollbar-thin scrollbar-thumb-zinc-700 min-h-[36px]">
+                                  <AnimatePresence mode="popLayout">
+                                    <motion.div 
+                                       key={activeTab}
+                                       initial={{ opacity: 0, y: 10 }}
+                                       animate={{ opacity: 1, y: 0 }}
+                                       exit={{ opacity: 0, y: -10 }}
+                                       transition={{ duration: 0.2 }}
+                                       className="flex gap-2 w-max"
+                                    >
+                                       {activeCards.length === 0 ? (
+                                          <span className="text-[10px] text-zinc-500 italic py-1">No cards available in this category</span>
+                                       ) : (
+                                          activeCards.map(renderCardBtn)
+                                       )}
+                                    </motion.div>
+                                  </AnimatePresence>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
                        
                        {/* Owned Cards (Click to Execute) */}
                        <div className="flex flex-wrap gap-1.5 mt-1 border-t border-zinc-800/50 pt-1">

@@ -45,3 +45,16 @@ export const playInjectionSound = () => {
 export const playActivitySound = () => {
   play("/sounds/activity.mp3", 0.3);
 };
+
+// Timer Sounds
+export const playHourAlertSound = () => {
+  play("/sounds/hour-alert.mp3", 0.6);
+};
+
+export const playTickingSound = () => {
+  play("/sounds/ticking.mp3", 0.5);
+};
+
+export const playTimeUpSound = () => {
+  play("/sounds/time-up.mp3", 0.8);
+};

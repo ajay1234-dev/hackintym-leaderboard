@@ -12,9 +12,7 @@ import { playActivitySound, playBountySound, playInjectionSound } from '@/lib/so
 export default function TopActivityBar() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { showCardCelebration } = useGlobalEffects();
   
   const [flashId, setFlashId] = useState<string | null>(null);
   const lastLogId = useRef<string | null>(null);
@@ -32,7 +30,7 @@ export default function TopActivityBar() {
          const topLog = data[0];
          if (lastLogId.current && lastLogId.current !== topLog.id) {
             setFlashId(topLog.id);
-            setTimeout(() => setFlashId(null), 300);
+            setTimeout(() => setFlashId(null), 500);
 
             // Audio Routing
             const rawMsg = topLog.message || topLog.action || '';
@@ -131,134 +129,87 @@ export default function TopActivityBar() {
     return { logMessage, actionColor, iconColor, bgHighlight, borderLine };
   };
 
-  const latestLog = logs[0];
-  const { logMessage, actionColor, borderLine } = latestLog ? getLogDetails(latestLog) : { logMessage: '', actionColor: '', borderLine: '' };
+  // We ONLY keep the absolute 2 newest logs for a tight layout.
+  // We slice first to get the newest 2, then reverse so the absolute newest is at index 1 (bottom).
+  const displayLogs = logs.slice(0, 2).reverse();
 
   return (
     <div className="relative mb-4 sm:mb-6 w-full z-20">
-      {/* Main Top Bar (Glassmorphism Strip) */}
-      <div 
-         className={`relative glass-panel rounded-xl flex items-center justify-between border neon-border cursor-pointer transition-all duration-300 overflow-hidden ${isExpanded ? 'rounded-b-none border-b-0' : ''}`}
-         onClick={() => setIsExpanded(!isExpanded)}
-      >
-        {/* Neon Left Border Indicator */}
-        <div className={`absolute top-0 bottom-0 left-0 border-l-4 ${latestLog ? borderLine : 'border-l-zinc-700'}`}></div>
-        
-        {/* Flash Background Effect */}
-        <AnimatePresence>
-          {flashId === (latestLog?.id || 'none') && (
-            <motion.div 
-               initial={{ opacity: 0.8 }} 
-               animate={{ opacity: 0 }} 
-               transition={{ duration: 0.6, ease: "easeOut" }}
-               className="absolute inset-0 bg-white/20 pointer-events-none"
-            />
-          )}
-        </AnimatePresence>
-
-        <div className="p-3 sm:px-4 flex-1 flex items-center gap-3 overflow-hidden">
-           <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-[#39ff14] shrink-0 animate-pulse" />
-           <div className="flex-1 min-w-0 pr-4">
-              {logs.length === 0 ? (
-                 <span className="text-xs text-zinc-500 font-mono tracking-widest uppercase truncate block">Waiting for activity...</span>
-              ) : isExpanded ? (
-                 <motion.div
-                    key="expanded-title"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex items-center gap-2"
-                 >
-                    <span className="text-xs sm:text-sm font-bold text-zinc-400 uppercase tracking-widest">
-                       Live Activity Uplink
-                    </span>
-                 </motion.div>
-              ) : (
-                 <AnimatePresence mode="wait">
-                    <motion.div
-                       key={latestLog.id}
-                       initial={{ opacity: 0, y: -10 }}
-                       animate={{ opacity: 1, y: 0, scale: flashId === latestLog.id ? [1, 1.02, 1] : 1 }}
-                       exit={{ opacity: 0, y: 10 }}
-                       transition={{ duration: 0.2 }}
-                       className="flex items-center gap-2"
-                    >
-                       <span className="text-[10px] items-center py-0.5 px-1.5 rounded-md font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 hidden sm:flex shrink-0">
-                          {getTimeString(latestLog.timestamp)}
-                       </span>
-                       {latestLog.teamName && (
-                         <span className="text-[10px] font-bold text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded-sm border border-zinc-700 shrink-0">
-                           {latestLog.teamName}
-                         </span>
-                       )}
-                       <span className={`text-xs sm:text-sm font-bold truncate max-w-full ${actionColor}`} title={logMessage}>
-                          {latestLog.actionType === 'score' ? '⚡ ' : ''}
-                          {logMessage}
-                       </span>
-                    </motion.div>
-                 </AnimatePresence>
-              )}
-           </div>
-        </div>
-        
-        <div className="shrink-0 pr-3 sm:pr-4 flex items-center gap-2 text-zinc-400 hover:text-white transition-colors">
-            <span className="text-xs font-mono uppercase tracking-widest font-bold hidden sm:block">View All</span>
-            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </div>
+      <div className="absolute -top-3 left-4 text-[10px] font-black uppercase tracking-[0.2em] text-[#39ff14] bg-black px-2 z-10 flex items-center gap-1.5 shadow-[0_0_10px_#39ff14]">
+        <Activity className="w-3 h-3 animate-pulse" />
+        Live Feed
       </div>
 
-      {/* Expandable Dropdown History */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-             initial={{ opacity: 0, height: 0 }}
-             animate={{ opacity: 1, height: 'auto' }}
-             exit={{ opacity: 0, height: 0 }}
-             transition={{ duration: 0.3, ease: 'easeOut' }}
-             className="absolute top-full left-0 right-0 glass-panel rounded-b-xl border border-t-zinc-800/50 neon-border shadow-2xl overflow-hidden z-50 flex flex-col"
-          >
-             <div className="p-2 sm:p-3 max-h-[300px] overflow-y-auto flex flex-col gap-1.5 sm:gap-2">
-                {logs.length === 0 && (
-                   <div className="text-center py-6 text-xs text-zinc-500 uppercase tracking-widest italic font-mono">No History</div>
-                )}
-                          {logs.map((log) => {
-                   const { logMessage, actionColor, bgHighlight, borderLine } = getLogDetails(log);
-                   const timeString = getTimeString(log.timestamp);
+      <div className="relative glass-panel rounded-xl border neon-border h-[88px] overflow-hidden flex flex-col bg-black/40">
+        {/* Soft gradient masks at top and bottom for the cinematic fade out effect */}
+        <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-zinc-950 to-transparent z-10 pointer-events-none"></div>
+        <div className="absolute inset-x-0 bottom-0 h-4 bg-gradient-to-t from-zinc-950 to-transparent z-10 pointer-events-none"></div>
 
-                   return (
-                      <motion.div
-                        key={log.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className={`flex gap-3 items-center p-2 rounded-lg border-l-2 ${borderLine} ${bgHighlight} bg-zinc-900/40 hover:bg-zinc-800/60 transition-colors w-full group`}
-                      >
-                         <div className="text-zinc-500 shrink-0 flex items-center justify-center w-4 h-4">
-                           {log.actionType === 'score' ? <span className="text-[#39ff14] drop-shadow-md">⚡</span> : log.actionType === 'bounty' ? <Target size={12} className="text-purple-500" /> : <Clock size={12} />}
-                         </div>
-                         <div className="flex-1 min-w-0 flex items-center gap-3 overflow-hidden">
-                             <span className="text-[10px] items-center px-1.5 rounded-sm font-mono text-zinc-500 bg-zinc-800/80 shrink-0">
-                                {timeString}
+        <div className="p-2 sm:p-3 flex flex-col gap-1.5 h-full">
+          <AnimatePresence mode="popLayout">
+            {displayLogs.length === 0 ? (
+               <motion.div key="empty" className="text-center text-xs text-zinc-500 uppercase tracking-widest font-mono py-2">
+                 Standing by for uplink...
+               </motion.div>
+            ) : (
+               displayLogs.map((log) => {
+                 const { logMessage, actionColor, bgHighlight, borderLine } = getLogDetails(log);
+                 const timeString = getTimeString(log.timestamp);
+                 const isFlash = flashId === log.id;
+
+                 return (
+                    <motion.div
+                      layout
+                      key={log.id}
+                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                      animate={{ 
+                        opacity: 1, 
+                        y: 0, 
+                        scale: 1,
+                        backgroundColor: isFlash ? 'rgba(255,255,255,0.1)' : undefined
+                      }}
+                      exit={{ opacity: 0, y: -20, scale: 0.95, transition: { duration: 0.4 } }}
+                      transition={{ 
+                         duration: 0.5, 
+                         type: 'spring', 
+                         stiffness: 300, 
+                         damping: 30 
+                      }}
+                      className={`flex gap-3 items-center p-2 rounded-lg border-l-2 ${borderLine} ${bgHighlight} bg-zinc-900/40 w-full relative overflow-hidden`}
+                    >
+                       {isFlash && (
+                         <motion.div 
+                           className="absolute inset-0 bg-white/20"
+                           initial={{ opacity: 1 }}
+                           animate={{ opacity: 0 }}
+                           transition={{ duration: 0.8 }}
+                         />
+                       )}
+                       
+                       <div className="text-zinc-500 shrink-0 flex items-center justify-center w-4 h-4 ml-1">
+                         {log.actionType === 'score' ? <span className="text-[#39ff14] drop-shadow-md">⚡</span> : log.actionType === 'bounty' ? <Target size={12} className="text-purple-500" /> : <Clock size={12} />}
+                       </div>
+                       
+                       <div className="flex-1 min-w-0 flex items-center gap-3 overflow-hidden z-10">
+                           <span className="text-[10px] items-center px-1.5 rounded-sm font-mono text-zinc-500 bg-black/80 shrink-0 border border-zinc-800">
+                              {timeString}
+                           </span>
+                           {log.teamName && (
+                             <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-300 bg-zinc-800 border border-zinc-700/50 px-1.5 py-0.5 rounded-sm shrink-0">
+                               {log.teamName}
                              </span>
-                             {log.teamName && (
-                               <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-300 bg-zinc-800 border border-zinc-700/50 px-1.5 py-0.5 rounded-sm shrink-0">
-                                 {log.teamName}
-                               </span>
-                             )}
-                             <span className={`text-[11px] sm:text-xs truncate max-w-full ${actionColor}`} title={logMessage}>
-                               {logMessage}
-                             </span>
-                         </div>
-                      </motion.div>
-                   );
-                })}
-             </div>
-             <div className="bg-zinc-900/80 p-2 text-center border-t border-zinc-800">
-                <span className="text-[9px] sm:text-[10px] uppercase tracking-widest font-mono text-zinc-500 flex items-center justify-center gap-1">
-                   <Clock size={10} /> Showing Last 5 Events
-                </span>
-             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                           )}
+                           <span className={`text-[11px] sm:text-xs truncate max-w-full font-bold tracking-wide ${actionColor}`} title={logMessage}>
+                             {logMessage}
+                           </span>
+                       </div>
+                    </motion.div>
+                 );
+               })
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }

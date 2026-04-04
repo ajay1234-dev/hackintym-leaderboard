@@ -5,22 +5,30 @@ import { Lock, BookOpen } from 'lucide-react';
 import { GlobalEffectsProvider } from '@/components/dashboard/GlobalEffectsContext';
 import TopActivityBar from '@/components/dashboard/TopActivityBar';
 import GlobalEventBanner from '@/components/dashboard/GlobalEventBanner';
+import GlobalTimer from '@/components/dashboard/GlobalTimer';
 
 export default function DashboardPage() {
   return (
-    <main className="min-h-screen p-3 sm:p-4 md:p-6 flex flex-col gap-4 sm:gap-6 max-w-[1600px] mx-auto">
+    <main className="min-h-screen pt-4 p-3 sm:p-4 md:p-6 flex flex-col gap-4 sm:gap-6 max-w-[1600px] mx-auto relative">
       <GlobalEventBanner />
-      {/* Title Header */}
-      <header className="glass-panel p-4 sm:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between border neon-border gap-4">
-        <div className="flex-1">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tight uppercase neon-text">
+      <header className="glass-panel p-4 sm:p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 items-center border neon-border gap-6 md:gap-4 relative">
+        {/* Left Column: Title */}
+        <div className="flex flex-col items-center md:items-start justify-center">
+          <h1 className="text-2xl sm:text-3xl md:text-3xl lg:text-4xl font-black tracking-tight uppercase neon-text md:whitespace-nowrap">
             Hackintym
           </h1>
-          <h2 className="text-sm sm:text-base md:text-lg lg:text-2xl font-bold tracking-[0.2em] text-zinc-400 uppercase mt-1">
+          <h2 className="text-xs sm:text-sm md:text-sm lg:text-base font-bold tracking-[0.2em] text-zinc-400 uppercase mt-1 md:whitespace-nowrap">
             Evolution Arena
           </h2>
         </div>
-        <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+
+        {/* Center Column: Global Timer */}
+        <div className="flex justify-center items-center w-full">
+          <GlobalTimer />
+        </div>
+
+        {/* Right Column: Actions */}
+        <div className="flex flex-col items-center md:items-end gap-2 w-full justify-center">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-[#39ff14] animate-pulse shadow-[0_0_10px_rgba(57,255,20,0.8)]"></div>
             <span className="text-xs sm:text-sm font-mono text-[#39ff14] tracking-wider uppercase font-bold">

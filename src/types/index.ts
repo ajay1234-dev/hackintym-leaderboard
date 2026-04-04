@@ -33,7 +33,7 @@ export interface Injection {
   title: string;
   description: string;
   points: number;
-  status: 'active' | 'resolved';
+  status: 'active' | 'resolved' | 'staged';
   type?: 'global' | 'selective';
   targetTeamId?: string;
   rewardCardId?: string;
@@ -41,6 +41,8 @@ export interface Injection {
   multiplier?: number;
   duration?: number;
   expiresAt?: number;
+  triggerAtRemainingTime?: number; // Automatic deployment hook relative to remaining seconds
+  isTriggered?: boolean;
 }
 
 export interface Bounty {
