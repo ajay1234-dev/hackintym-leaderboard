@@ -11,7 +11,7 @@ import { useGlobalEffects, useTeamHighlight } from './GlobalEffectsContext';
 import { useCardDetection } from '@/hooks/useCardDetection';
 import { CARD_ICONS } from '@/lib/icons';
 import { Info } from 'lucide-react';
-import { playRankChangeSound, playScoreSound } from '@/lib/soundManager';
+import { playRankChangeSound, playScoreSound, playTopThreeSound, playTopTenSound } from '@/lib/soundManager';
 
 // Extend Team to include totalScore locally for sorting and display
 interface TeamWithScore extends Team {
@@ -88,18 +88,27 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
     }
   }, [team.totalScore, prevScore, triggerPoints]);
 
+  // Determine baseline container styling based on tier
+  let defaultBg = 'bg-zinc-900/30 border-zinc-800/50 hover:bg-zinc-800/40 opacity-70 grayscale-[0.3]'; // 11th and below
+  if (index < 3) {
+    defaultBg = 'bg-zinc-800/40 border-zinc-600/50 hover:bg-zinc-700/50 shadow-[0_4px_20px_rgba(0,0,0,0.4)] z-10'; // Top 3
+  } else if (index < 10) {
+    defaultBg = 'bg-zinc-800/20 border-cyan-900/30 hover:bg-zinc-800/40 hover:border-cyan-700/50'; // Top 10
+  }
+
   const glowClass = delta 
     ? (delta > 0 
-        ? 'bg-[rgba(57,255,20,0.15)] border-[#39ff14]/50 shadow-[0_0_15px_rgba(57,255,20,0.2)]' 
-        : 'bg-[rgba(239,68,68,0.15)] border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]')
+        ? 'bg-[rgba(57,255,20,0.15)] border-[#39ff14]/50 shadow-[0_0_15px_rgba(57,255,20,0.2)] z-20' 
+        : 'bg-[rgba(239,68,68,0.15)] border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] z-20')
     : isHighlighted
-    ? 'bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20 border-blue-400/60 shadow-[0_0_25px_rgba(59,130,246,0.4),0_0_40px_rgba(168,85,247,0.3)]'
-    : 'bg-zinc-800/20 border-zinc-700/50 hover:bg-zinc-800/40';
+    ? 'bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20 border-blue-400/60 shadow-[0_0_25px_rgba(59,130,246,0.4),0_0_40px_rgba(168,85,247,0.3)] z-20'
+    : defaultBg;
 
   let rankClass = 'text-zinc-500';
-  if (index === 0) rankClass = 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.6)]';
-  else if (index === 1) rankClass = 'text-zinc-300 drop-shadow-[0_0_10px_rgba(212,212,216,0.5)]';
-  else if (index === 2) rankClass = 'text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.4)]';
+  if (index === 0) rankClass = 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.6)] scale-110';
+  else if (index === 1) rankClass = 'text-zinc-200 drop-shadow-[0_0_10px_rgba(228,228,231,0.5)] scale-105';
+  else if (index === 2) rankClass = 'text-amber-600 drop-shadow-[0_0_10px_rgba(217,119,6,0.4)] scale-105';
+  else if (index < 10) rankClass = 'text-cyan-500 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]';
 
   return (
     <motion.div
@@ -257,11 +266,30 @@ export default function Leaderboard() {
       // Perform strict rank change checks to play audio
       if (!isFirstRender.current) {
          let playedRankSound = false; // anti-spam for batch changes
+         let playedTop3Sound = false; // prioritize top 3 entry
+         let playedTop10Sound = false; // prioritize top 10 entry
+         
          sortedTeams.forEach((t, i) => {
             const newRank = i + 1;
             const prevRank = prevRanks.current[t.id];
+            
             if (prevRank && newRank < prevRank) {
-               if (!playedRankSound && (newRank <= 3 || (prevRank - newRank) >= 3)) {
+               // Did they organically enter the top 3?
+               if (prevRank > 3 && newRank <= 3) {
+                  if (!playedTop3Sound) {
+                     playTopThreeSound();
+                     playedTop3Sound = true;
+                  }
+               }
+               // Did they organically enter the top 10?
+               else if (prevRank > 10 && newRank <= 10) {
+                  if (!playedTop10Sound) {
+                     playTopTenSound();
+                     playedTop10Sound = true;
+                  }
+               }
+               // Otherwise standard climb
+               else if (!playedRankSound && !playedTop3Sound && !playedTop10Sound && (newRank <= 3 || (prevRank - newRank) >= 3)) {
                   playRankChangeSound();
                   playedRankSound = true;
                }

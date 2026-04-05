@@ -54,8 +54,8 @@ export default function GlobalTimer() {
              lastPlayedHour.current = remainingSeconds;
           }
 
-          // Tick sequence for final 10 seconds
-          if (remainingSeconds <= 10 && remainingSeconds > 0) {
+          // Tick sequence for final 10 seconds. Play exactly once on the threshold.
+          if (remainingSeconds === 10) {
              playTickingSound();
           }
        }

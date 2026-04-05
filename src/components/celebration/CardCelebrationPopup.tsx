@@ -29,8 +29,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
   useEffect(() => {
     if (isVisible && celebration?.card) {
       if (celebration.card.type === 'LEGENDARY') playCelebrationSound();
-      else if (celebration.card.type === 'RARE') playCardSound();
-      else playScoreSound();
+      else playCardSound();
     }
   }, [isVisible, celebration]);
 

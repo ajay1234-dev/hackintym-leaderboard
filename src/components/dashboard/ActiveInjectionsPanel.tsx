@@ -41,14 +41,19 @@ export default function ActiveInjectionsPanel() {
          if (!ev.expiresAt) return;
          const remaining = ev.expiresAt - currentTime;
 
-         if (remaining <= 30000 && remaining > 0 && !playedAlertsRef.current.has(`${ev.id}-30s`)) {
+         if (remaining <= 30000 && remaining > 29000 && !playedAlertsRef.current.has(`${ev.id}-30s`)) {
             playedAlertsRef.current.add(`${ev.id}-30s`);
             playHourAlertSound();
          }
 
-         if (remaining <= 10000 && remaining > 0 && !playedAlertsRef.current.has(`${ev.id}-10s`)) {
+         if (remaining <= 10000 && remaining > 9000 && !playedAlertsRef.current.has(`${ev.id}-10s`)) {
             playedAlertsRef.current.add(`${ev.id}-10s`);
             playTickingSound();
+         }
+
+         if (remaining <= 0 && remaining > -1000 && !playedAlertsRef.current.has(`${ev.id}-end`)) {
+            playedAlertsRef.current.add(`${ev.id}-end`);
+            playResolveSound();
          }
       });
     }, 1000);
@@ -135,7 +140,18 @@ export default function ActiveInjectionsPanel() {
             playBountySound();
          }
       } else if (removed.length > 0) {
-         playResolveSound();
+         // Network-synced fallback for manual admin deletions
+         let newlyResolved = false;
+         removed.forEach(id => {
+            if (!playedAlertsRef.current.has(`${id}-end`)) {
+               newlyResolved = true;
+               playedAlertsRef.current.add(`${id}-end`);
+            }
+         });
+         // Only play if it wasn't already caught by the ultra-fast local clock
+         if (newlyResolved) {
+            playResolveSound();
+         }
       }
     }
     
@@ -162,76 +178,91 @@ export default function ActiveInjectionsPanel() {
     }
   };
 
-  const displayedEvents = expanded ? events : events.slice(0, 2);
-  const hiddenCount = events.length > 2 ? events.length - 2 : 0;
+  const validEvents = events.filter(ev => {
+    if (!ev.expiresAt) return true;
+    return ev.expiresAt - now > 0;
+  });
+
+  const displayedEvents = expanded ? validEvents : validEvents.slice(0, 2);
+  const hiddenCount = validEvents.length > 2 ? validEvents.length - 2 : 0;
 
   return (
-    <div className="flex flex-col gap-3 justify-center items-end absolute md:relative right-full md:right-auto mr-4 md:mr-0 z-20 pointer-events-none min-w-[250px]">
-      <AnimatePresence mode="popLayout">
-        {displayedEvents.map(ev => {
-          const remainingTime = ev.expiresAt ? Math.max(0, ev.expiresAt - now) : null;
-          const styles = getEventStyles(ev);
-          
-          let displayType = '';
-          if (ev.type === 'BOUNTY') {
-             displayType = `🎯 BOUNTY LIVE`;
-          } else {
-             displayType = `⚡ ${ev.title.toUpperCase()}`;
-             if (ev.eventType === 'MULTIPLIER') displayType = `⚡ ${ev.multiplier}X SCORE MULTIPLIER`;
-          }
-          
-          return (
-             <motion.div
-               layout
-               key={ev.id}
-               initial={{ opacity: 0, scale: 0.95, y: -10 }}
-               animate={{ opacity: 1, scale: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.2 } }}
-               className={`glass-panel border-2 ${styles.border} ${styles.shadow} ${styles.bg} rounded-full py-2 px-4 sm:py-2.5 sm:px-5 bg-black/90 backdrop-blur-xl flex items-center gap-3 pointer-events-auto`}
-             >
-                <div className="flex items-center justify-between w-full gap-4">
-                  <span className={`text-xs sm:text-sm font-black uppercase tracking-widest ${styles.text} whitespace-nowrap drop-shadow-[0_0_8px_currentColor]`}>
-                    {displayType}
-                  </span>
-                  
-                  {remainingTime !== null && (
-                    <span className={`font-mono text-white text-sm sm:text-base font-black tabular-nums bg-black/80 px-3 py-1 rounded-full border border-white/20 flex items-center gap-1 shadow-[inset_0_3px_6px_rgba(0,0,0,0.8)] ${remainingTime < 10000 ? 'text-red-400 animate-pulse border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : ''}`}>
-                      {formatTime(remainingTime)}
-                    </span>
-                  )}
-                </div>
-             </motion.div>
-          );
-        })}
+    <AnimatePresence>
+      {displayedEvents.length > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, width: 0, marginRight: 0 }}
+          animate={{ opacity: 1, width: 'auto', marginRight: '16px' }}
+          exit={{ opacity: 0, width: 0, marginRight: 0, transition: { duration: 0.3 } }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="flex flex-col gap-3 justify-center items-end absolute md:relative right-full md:right-auto z-20 pointer-events-none shrink-0"
+        >
+          <AnimatePresence mode="popLayout">
+            {displayedEvents.map(ev => {
+              const remainingTime = ev.expiresAt ? Math.max(0, ev.expiresAt - now) : null;
+              const styles = getEventStyles(ev);
+              
+              let displayType = '';
+              if (ev.type === 'BOUNTY') {
+                 displayType = `🎯 BOUNTY LIVE`;
+              } else {
+                 displayType = `⚡ ${ev.title.toUpperCase()}`;
+                 if (ev.eventType === 'MULTIPLIER') displayType = `⚡ ${ev.multiplier}X SCORE MULTIPLIER`;
+              }
+              
+              return (
+                 <motion.div
+                   layout
+                   key={ev.id}
+                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                   animate={{ opacity: 1, scale: 1, y: 0 }}
+                   exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.2 } }}
+                   className={`glass-panel border-2 ${styles.border} ${styles.shadow} ${styles.bg} rounded-full py-2 px-4 sm:py-2.5 sm:px-5 bg-black/90 backdrop-blur-xl flex items-center gap-3 pointer-events-auto`}
+                 >
+                    <div className="flex items-center justify-between w-full gap-4">
+                      <span className={`text-xs sm:text-sm font-black uppercase tracking-widest ${styles.text} whitespace-nowrap drop-shadow-[0_0_8px_currentColor]`}>
+                        {displayType}
+                      </span>
+                      
+                      {remainingTime !== null && (
+                        <span className={`font-mono text-white text-sm sm:text-base font-black tabular-nums bg-black/80 px-3 py-1 rounded-full border border-white/20 flex items-center gap-1 shadow-[inset_0_3px_6px_rgba(0,0,0,0.8)] ${remainingTime < 10000 ? 'text-red-400 animate-pulse border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : ''}`}>
+                          {formatTime(remainingTime)}
+                        </span>
+                      )}
+                    </div>
+                 </motion.div>
+              );
+            })}
 
-        {!expanded && hiddenCount > 0 && (
-          <motion.button
-            layout
-            key="expand-btn"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            onClick={() => setExpanded(true)}
-            className="pointer-events-auto text-xs font-black tracking-widest uppercase bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-500 text-zinc-100 px-4 py-1.5 rounded-full transition-colors backdrop-blur-md shadow-[0_4px_15px_rgba(0,0,0,0.6)]"
-          >
-            +{hiddenCount} More
-          </motion.button>
-        )}
+            {!expanded && hiddenCount > 0 && (
+              <motion.button
+                layout
+                key="expand-btn"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                onClick={() => setExpanded(true)}
+                className="pointer-events-auto text-xs font-black tracking-widest uppercase bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-500 text-zinc-100 px-4 py-1.5 rounded-full transition-colors backdrop-blur-md shadow-[0_4px_15px_rgba(0,0,0,0.6)] mt-1"
+              >
+                +{hiddenCount} More
+              </motion.button>
+            )}
 
-        {expanded && events.length > 2 && (
-          <motion.button
-            layout
-            key="collapse-btn"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            onClick={() => setExpanded(false)}
-            className="pointer-events-auto text-xs font-black tracking-widest uppercase bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-500 text-zinc-100 px-4 py-1.5 rounded-full transition-colors backdrop-blur-md shadow-[0_4px_15px_rgba(0,0,0,0.6)]"
-          >
-            Show Less
-          </motion.button>
-        )}
-      </AnimatePresence>
-    </div>
+            {expanded && validEvents.length > 2 && (
+              <motion.button
+                layout
+                key="collapse-btn"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                onClick={() => setExpanded(false)}
+                className="pointer-events-auto text-xs font-black tracking-widest uppercase bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-500 text-zinc-100 px-4 py-1.5 rounded-full transition-colors backdrop-blur-md shadow-[0_4px_15px_rgba(0,0,0,0.6)] mt-1"
+              >
+                Show Less
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

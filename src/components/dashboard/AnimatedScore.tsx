@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { playScoreSound } from '@/lib/soundManager';
+import { playScoreSound, playScoreDeductSound } from '@/lib/soundManager';
 
 interface AnimatedScoreProps {
   value: number;
@@ -22,7 +22,11 @@ export default function AnimatedScore({ value, className = '' }: AnimatedScorePr
 
     if (displayValue === value) return;
     
-    playScoreSound();
+    if (value < displayValue) {
+       playScoreDeductSound();
+    } else {
+       playScoreSound();
+    }
     
     const startValue = displayValue;
     const endValue = value;
