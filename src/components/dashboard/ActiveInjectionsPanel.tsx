@@ -3,50 +3,144 @@
 import { useEffect, useState, useRef } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Injection } from '@/types';
+import { Injection, Bounty } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { playInjectionSound, playResolveSound } from '@/lib/soundManager';
+import { playInjectionSound, playResolveSound, playBountySound, playScoreSound, playRankChangeSound, playFreezeSound, playSpecialRuleSound, playHourAlertSound, playTickingSound } from '@/lib/soundManager';
+
+interface ActiveEvent {
+  id: string;
+  type: 'INJECTION' | 'BOUNTY';
+  title: string;
+  eventType?: string;
+  multiplier?: number;
+  expiresAt?: number;
+}
 
 export default function ActiveInjectionsPanel() {
-  const [injections, setInjections] = useState<Injection[]>([]);
+  const [events, setEvents] = useState<ActiveEvent[]>([]);
   const [now, setNow] = useState(Date.now());
   const [expanded, setExpanded] = useState(false);
-  const prevInjectionsRef = useRef<Injection[] | undefined>(undefined);
+  
+  const prevEventsRef = useRef<ActiveEvent[] | undefined>(undefined);
+  const isFirstMount = useRef(true);
+  
+  const eventsRef = useRef<ActiveEvent[]>([]);
+  const playedAlertsRef = useRef<Set<string>>(new Set());
 
-  // Sync clock every second to update countdowns
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    eventsRef.current = events;
+  }, [events]);
+
+  // Clock & Audio Countdown Enforcement
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+
+      eventsRef.current.forEach(ev => {
+         if (!ev.expiresAt) return;
+         const remaining = ev.expiresAt - currentTime;
+
+         if (remaining <= 30000 && remaining > 0 && !playedAlertsRef.current.has(`${ev.id}-30s`)) {
+            playedAlertsRef.current.add(`${ev.id}-30s`);
+            playHourAlertSound();
+         }
+
+         if (remaining <= 10000 && remaining > 0 && !playedAlertsRef.current.has(`${ev.id}-10s`)) {
+            playedAlertsRef.current.add(`${ev.id}-10s`);
+            playTickingSound();
+         }
+      });
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch active injections
+  // Fetch Injections & Bounties
   useEffect(() => {
-    const qInjections = query(collection(db, 'injections'), where('status', '==', 'active'));
-    const unsub = onSnapshot(qInjections, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Injection[];
-      setInjections(data.sort((a,b) => (a.expiresAt || 0) - (b.expiresAt || 0)));
+    const qInjs = query(collection(db, 'injections'), where('status', '==', 'active'));
+    const qBounties = query(collection(db, 'bounties'), where('status', '==', 'active'));
+
+    let currentInjs: ActiveEvent[] = [];
+    let currentBounties: ActiveEvent[] = [];
+
+    const syncEvents = () => {
+       const merged = [...currentInjs, ...currentBounties].sort((a,b) => {
+          const timeA = a.expiresAt || Infinity;
+          const timeB = b.expiresAt || Infinity;
+          return timeA - timeB; // Sort by closest expiration
+       });
+       setEvents(merged);
+    };
+
+    const unsubInjs = onSnapshot(qInjs, (snap) => {
+      currentInjs = snap.docs.map(doc => {
+         const data = doc.data() as Injection;
+         return {
+           id: doc.id,
+           type: 'INJECTION' as const,
+           title: data.title,
+           eventType: data.eventType,
+           multiplier: data.multiplier,
+           expiresAt: data.expiresAt
+         };
+      });
+      syncEvents();
     });
-    return () => unsub();
+
+    const unsubBounties = onSnapshot(qBounties, (snap) => {
+      currentBounties = snap.docs.map(doc => {
+         const data = doc.data() as Bounty;
+         return {
+           id: doc.id,
+           type: 'BOUNTY' as const,
+           title: data.title
+         };
+      });
+      syncEvents();
+    });
+
+    return () => { unsubInjs(); unsubBounties(); };
   }, []);
 
-  // Sound triggers on state changes
+  // Audio Engine Validation
   useEffect(() => {
-    if (prevInjectionsRef.current !== undefined) {
-      const prevIds = prevInjectionsRef.current.map(i => i.id);
-      const newIds = injections.map(i => i.id);
+    if (isFirstMount.current) {
+       // Allow array to populate without triggering sounds on initial page boot
+       if (events.length > 0) {
+         prevEventsRef.current = events;
+         isFirstMount.current = false;
+       }
+       return;
+    }
 
-      const added = newIds.filter(id => !prevIds.includes(id));
-      const removedOrResolved = prevIds.filter(id => !newIds.includes(id));
+    if (prevEventsRef.current !== undefined) {
+      const prevIds = prevEventsRef.current.map(e => e.id);
+      const newIds = events.map(e => e.id);
+
+      const added = events.filter(e => !prevIds.includes(e.id));
+      const removed = prevIds.filter(id => !newIds.includes(id));
 
       if (added.length > 0) {
-        playInjectionSound();
-      } else if (removedOrResolved.length > 0) {
-        playResolveSound();
+         const addedInjections = added.filter(a => a.type === 'INJECTION');
+         const hasBounty = added.some(a => a.type === 'BOUNTY');
+         
+         if (addedInjections.length > 0) {
+            const firstInj = addedInjections[0];
+            if (firstInj.eventType === 'POINTS') playScoreSound();
+            else if (firstInj.eventType === 'MULTIPLIER') playRankChangeSound();
+            else if (firstInj.eventType === 'FREEZE') playFreezeSound();
+            else if (firstInj.eventType === 'SPECIAL_RULE') playSpecialRuleSound();
+            else playInjectionSound();
+         } else if (hasBounty) {
+            playBountySound();
+         }
+      } else if (removed.length > 0) {
+         playResolveSound();
       }
     }
     
-    prevInjectionsRef.current = injections;
-  }, [injections]);
+    prevEventsRef.current = events;
+  }, [events]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -55,8 +149,11 @@ export default function ActiveInjectionsPanel() {
     return `${m}:${s}`;
   };
 
-  const getTypeStyles = (type: string | undefined) => {
-    switch (type) {
+  const getEventStyles = (ev: ActiveEvent) => {
+    if (ev.type === 'BOUNTY') {
+       return { border: 'border-purple-500/80', text: 'text-purple-400', shadow: 'shadow-[0_0_15px_rgba(168,85,247,0.4)]', bg: 'bg-purple-500/10' };
+    }
+    switch (ev.eventType) {
       case 'MULTIPLIER': return { border: 'border-blue-500/80', text: 'text-blue-400', shadow: 'shadow-[0_0_15px_rgba(59,130,246,0.4)]', bg: 'bg-blue-500/10' };
       case 'FREEZE': return { border: 'border-red-500/80', text: 'text-red-500', shadow: 'shadow-[0_0_15px_rgba(239,68,68,0.4)]', bg: 'bg-red-500/10' };
       case 'POINTS': return { border: 'border-green-500/80', text: 'text-green-400', shadow: 'shadow-[0_0_15px_rgba(34,197,94,0.4)]', bg: 'bg-green-500/10' };
@@ -65,34 +162,40 @@ export default function ActiveInjectionsPanel() {
     }
   };
 
-  const displayedInjections = expanded ? injections : injections.slice(0, 2);
-  const hiddenCount = injections.length > 2 ? injections.length - 2 : 0;
+  const displayedEvents = expanded ? events : events.slice(0, 2);
+  const hiddenCount = events.length > 2 ? events.length - 2 : 0;
 
   return (
-    <div className="flex flex-col gap-2 justify-center items-end absolute md:relative right-full md:right-auto mr-4 md:mr-0 z-20 pointer-events-none min-w-[200px]">
+    <div className="flex flex-col gap-3 justify-center items-end absolute md:relative right-full md:right-auto mr-4 md:mr-0 z-20 pointer-events-none min-w-[250px]">
       <AnimatePresence mode="popLayout">
-        {displayedInjections.map(injection => {
-          const remainingTime = injection.expiresAt ? Math.max(0, injection.expiresAt - now) : null;
-          const styles = getTypeStyles(injection.eventType);
-          let displayType = injection.title.toUpperCase();
-          if (injection.eventType === 'MULTIPLIER') displayType = `${injection.multiplier}X SCORE MULTIPLIER`;
+        {displayedEvents.map(ev => {
+          const remainingTime = ev.expiresAt ? Math.max(0, ev.expiresAt - now) : null;
+          const styles = getEventStyles(ev);
+          
+          let displayType = '';
+          if (ev.type === 'BOUNTY') {
+             displayType = `🎯 BOUNTY LIVE`;
+          } else {
+             displayType = `⚡ ${ev.title.toUpperCase()}`;
+             if (ev.eventType === 'MULTIPLIER') displayType = `⚡ ${ev.multiplier}X SCORE MULTIPLIER`;
+          }
           
           return (
              <motion.div
                layout
-               key={injection.id}
-               initial={{ opacity: 0, x: -20, scale: 0.95 }}
-               animate={{ opacity: 1, x: 0, scale: 1 }}
-               exit={{ opacity: 0, x: -20, scale: 0.9, transition: { duration: 0.2 } }}
-               className={`glass-panel border ${styles.border} ${styles.shadow} ${styles.bg} rounded-full py-1.5 px-3 bg-black/80 backdrop-blur-md flex items-center gap-2 pointer-events-auto`}
+               key={ev.id}
+               initial={{ opacity: 0, scale: 0.95, y: -10 }}
+               animate={{ opacity: 1, scale: 1, y: 0 }}
+               exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.2 } }}
+               className={`glass-panel border-2 ${styles.border} ${styles.shadow} ${styles.bg} rounded-full py-2 px-4 sm:py-2.5 sm:px-5 bg-black/90 backdrop-blur-xl flex items-center gap-3 pointer-events-auto`}
              >
-                <div className="flex items-center justify-between w-full gap-3">
-                  <span className={`text-[11px] sm:text-xs font-black uppercase tracking-widest ${styles.text} whitespace-nowrap`}>
-                    ⚡ {displayType}
+                <div className="flex items-center justify-between w-full gap-4">
+                  <span className={`text-xs sm:text-sm font-black uppercase tracking-widest ${styles.text} whitespace-nowrap drop-shadow-[0_0_8px_currentColor]`}>
+                    {displayType}
                   </span>
                   
                   {remainingTime !== null && (
-                    <span className={`font-mono text-white text-[10px] sm:text-xs font-bold tabular-nums bg-black/50 px-2 py-0.5 rounded-full border border-white/10 ${remainingTime < 10000 ? 'text-red-400 animate-pulse' : ''}`}>
+                    <span className={`font-mono text-white text-sm sm:text-base font-black tabular-nums bg-black/80 px-3 py-1 rounded-full border border-white/20 flex items-center gap-1 shadow-[inset_0_3px_6px_rgba(0,0,0,0.8)] ${remainingTime < 10000 ? 'text-red-400 animate-pulse border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : ''}`}>
                       {formatTime(remainingTime)}
                     </span>
                   )}
@@ -109,13 +212,13 @@ export default function ActiveInjectionsPanel() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setExpanded(true)}
-            className="pointer-events-auto text-[10px] font-bold tracking-widest uppercase bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 px-3 py-1 rounded-full transition-colors backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+            className="pointer-events-auto text-xs font-black tracking-widest uppercase bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-500 text-zinc-100 px-4 py-1.5 rounded-full transition-colors backdrop-blur-md shadow-[0_4px_15px_rgba(0,0,0,0.6)]"
           >
-            +{hiddenCount} More Events
+            +{hiddenCount} More
           </motion.button>
         )}
 
-        {expanded && injections.length > 2 && (
+        {expanded && events.length > 2 && (
           <motion.button
             layout
             key="collapse-btn"
@@ -123,7 +226,7 @@ export default function ActiveInjectionsPanel() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             onClick={() => setExpanded(false)}
-            className="pointer-events-auto text-[10px] font-bold tracking-widest uppercase bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 px-3 py-1 rounded-full transition-colors backdrop-blur-md shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+            className="pointer-events-auto text-xs font-black tracking-widest uppercase bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-500 text-zinc-100 px-4 py-1.5 rounded-full transition-colors backdrop-blur-md shadow-[0_4px_15px_rgba(0,0,0,0.6)]"
           >
             Show Less
           </motion.button>

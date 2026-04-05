@@ -11,7 +11,7 @@ import { useGlobalEffects, useTeamHighlight } from './GlobalEffectsContext';
 import { useCardDetection } from '@/hooks/useCardDetection';
 import { CARD_ICONS } from '@/lib/icons';
 import { Info } from 'lucide-react';
-import { playRankChangeSound } from '@/lib/soundManager';
+import { playRankChangeSound, playScoreSound } from '@/lib/soundManager';
 
 // Extend Team to include totalScore locally for sorting and display
 interface TeamWithScore extends Team {
@@ -74,6 +74,10 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
       setDelta(d);
       setPrevScore(team.totalScore);
       
+      if (d > 0) {
+        playScoreSound();
+      }
+
       if (rowRef.current) {
         const rect = rowRef.current.getBoundingClientRect();
         triggerPoints(d, rect.right - 50, rect.top + rect.height / 2);

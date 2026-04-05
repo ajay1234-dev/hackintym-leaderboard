@@ -46,6 +46,15 @@ export default function ControlRoom() {
   const [completingBounty, setCompletingBounty] = useState<Bounty | null>(null);
   const [selectedTeamForBounty, setSelectedTeamForBounty] = useState('');
 
+  // Time Form States for Injections
+  const [injDurHH, setInjDurHH] = useState('');
+  const [injDurMM, setInjDurMM] = useState('');
+  const [injDurSS, setInjDurSS] = useState('');
+
+  const [injTrigHH, setInjTrigHH] = useState('');
+  const [injTrigMM, setInjTrigMM] = useState('');
+  const [injTrigSS, setInjTrigSS] = useState('');
+
   // Manual Score State
   const [draftScores, setDraftScores] = useState<Record<string, Partial<Team>>>({});
 
@@ -431,7 +440,10 @@ export default function ControlRoom() {
     
     setIsAddingInjection(true);
     try {
-      const isAutoDeploy = (newInjection.triggerAtRemainingTime && newInjection.triggerAtRemainingTime > 0);
+      const durSeconds = (Number(injDurHH || 0) * 3600) + (Number(injDurMM || 0) * 60) + Number(injDurSS || 0);
+      const trigSeconds = (Number(injTrigHH || 0) * 3600) + (Number(injTrigMM || 0) * 60) + Number(injTrigSS || 0);
+
+      const isAutoDeploy = trigSeconds > 0;
       const isDeployingNow = !isAutoDeploy;
 
       const injectionPayload: Partial<Injection> = {
@@ -443,13 +455,13 @@ export default function ControlRoom() {
       };
 
       if (isAutoDeploy) {
-         injectionPayload.triggerAtRemainingTime = newInjection.triggerAtRemainingTime;
+         injectionPayload.triggerAtRemainingTime = trigSeconds;
       }
 
-      if (newInjection.duration && newInjection.duration > 0) {
-         injectionPayload.duration = newInjection.duration;
+      if (durSeconds > 0) {
+         injectionPayload.duration = durSeconds;
          if (isDeployingNow) {
-            injectionPayload.expiresAt = Date.now() + newInjection.duration * 1000;
+            injectionPayload.expiresAt = Date.now() + durSeconds * 1000;
          }
       }
       if (newInjection.type === 'selective') {
@@ -521,6 +533,8 @@ export default function ControlRoom() {
       }
       
       setNewInjection({ title: '', description: '', points: 0, type: 'global', targetTeamId: '', rewardCardId: '', eventType: 'POINTS', duration: 0, multiplier: 2, triggerAtRemainingTime: undefined });
+      setInjDurHH(''); setInjDurMM(''); setInjDurSS('');
+      setInjTrigHH(''); setInjTrigMM(''); setInjTrigSS('');
     } finally { setIsAddingInjection(false); }
   };
 
@@ -709,242 +723,6 @@ export default function ControlRoom() {
                🚨 Force Resolve All
             </button>
          </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Add Team */}
-        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
-          <h2 className="text-lg font-bold mb-4 text-[#39ff14] uppercase">Team Registry</h2>
-          <form onSubmit={handleAddTeam} className="flex flex-col sm:flex-row gap-3">
-            <input type="text" placeholder="Team Name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-4 focus:outline-none focus:border-[#39ff14] font-bold" disabled={isAddingTeam || isLocked} />
-            <button type="submit" disabled={isAddingTeam || !newTeamName.trim() || isLocked} className="bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14] text-[#39ff14] px-6 py-2 rounded-lg font-black uppercase tracking-widest disabled:opacity-50 transition-colors">Deploy</button>
-          </form>
-        </section>
-
-        {/* Deck Builder */}
-        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col gap-4">
-          <h2 className="text-lg font-bold text-[#39ff14] uppercase flex justify-between">
-            Deck Builder
-            <span className="text-xs text-zinc-500">{cards.length} Configured</span>
-          </h2>
-          
-          <form onSubmit={handleAddCard} className="space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <select value={newCard.icon} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center" required>
-                {Object.keys(CARD_ICONS).map(iconName => (
-                  <option key={iconName} value={iconName}>{iconName}</option>
-                ))}
-              </select>
-              <input type="text" placeholder="Card Name" value={newCard.name} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white" required />
-              <select 
-                value={newCard.type} 
-                onChange={e => {
-                  const newType = e.target.value as any;
-                  // Auto-switch icon based on category, user can override later
-                  let defaultIcon = newCard.icon;
-                  if (newType === 'COMMON') defaultIcon = 'Zap';
-                  if (newType === 'RARE') defaultIcon = 'Shield';
-                  if (newType === 'LEGENDARY') defaultIcon = 'Crown';
-                  
-                  setNewCard({...newCard, type: newType, icon: defaultIcon});
-                }} 
-                className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 font-bold uppercase tracking-widest text-xs"
-              >
-                <option value="COMMON" className="text-[#39ff14]">Common</option>
-                <option value="RARE" className="text-purple-400">Rare</option>
-                <option value="LEGENDARY" className="text-yellow-400">Legendary</option>
-              </select>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input type="text" placeholder="Description" value={newCard.description} onChange={e => setNewCard({...newCard, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white" />
-              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 uppercase placeholder:normal-case placeholder:text-zinc-600 tracking-wider" required />
-              <button type="submit" disabled={isAddingCard || !newCard.name || !newCard.effect || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 py-2 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
-            </div>
-          </form>
-
-          {/* Live Preview Panel */}
-          <div className="mt-2 pt-4 border-t border-zinc-800">
-             <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-500 mb-3">Live Hologram Preview</div>
-             <div className="max-w-[300px] mx-auto scale-95 origin-top">
-                {(() => {
-                   let borderClass = 'border-[#39ff14]/30 shadow-[0_0_15px_rgba(57,255,20,0.05)]';
-                   let glowClass = 'bg-[#39ff14]';
-                   let textClass = 'text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/10';
-                   let cardGlowEffect = '';
-                   
-                   if (newCard.type === 'RARE') {
-                      borderClass = 'border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10';
-                      glowClass = 'bg-purple-500';
-                      textClass = 'text-purple-400 border-purple-500/40 bg-purple-500/10';
-                   } else if (newCard.type === 'LEGENDARY') {
-                      borderClass = 'border-yellow-500/60 shadow-[0_0_25px_rgba(234,179,8,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-yellow-900/20';
-                      glowClass = 'bg-yellow-500';
-                      textClass = 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
-                      cardGlowEffect = 'animate-[pulse_4s_ease-in-out_infinite_alternate]';
-                   }
-
-                   const IconComp = CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] || CARD_ICONS.CircleSlash;
-
-                   return (
-                     <div className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass} ${cardGlowEffect}`}>
-                       <div className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-30 ${glowClass}`}></div>
-                       {newCard.type === 'LEGENDARY' && (
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none z-20"></div>
-                       )}
-                       
-                       <div className="flex flex-col h-full relative z-10 min-h-[160px]">
-                          <div className="flex items-start justify-between mb-4">
-                             <div className={`text-3xl p-3 rounded-2xl border bg-zinc-950 shadow-inner ${textClass}`}>
-                               <IconComp className="w-6 h-6 drop-shadow-[0_0_8px_currentColor]" />
-                             </div>
-                             <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded border shadow-sm ${textClass}`}>
-                               {newCard.type}
-                             </span>
-                          </div>
-                          <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight">{newCard.name || 'Undefined'}</h3>
-                          <p className="text-xs text-zinc-400 mb-6 flex-1 font-medium">{newCard.description || 'Awaiting structural data...'}</p>
-                          <div className="pt-3 border-t border-zinc-800">
-                             <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Effect Sequence</div>
-                             <div className={`text-xs font-mono font-black tracking-wider px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 ${textClass.split(' ')[0]}`}>
-                               {newCard.effect || 'NULL'}
-                             </div>
-                          </div>
-                       </div>
-                     </div>
-                   );
-                })()}
-             </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Manage Injections */}
-        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
-          <h2 className="text-lg font-bold mb-4 text-red-500 uppercase flex justify-between">
-            Global Phenomena
-            <span className="text-xs text-zinc-500">{injections.filter(i => i.status === 'active').length} Active</span>
-          </h2>
-          <form onSubmit={handleAddInjection} className="space-y-3 mb-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input type="text" placeholder="Phenomenon Title" value={newInjection.title} onChange={e => setNewInjection({...newInjection, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
-              
-              <select value={newInjection.type} onChange={e => setNewInjection({ ...newInjection, type: e.target.value as 'global' | 'selective', targetTeamId: '', eventType: 'POINTS' })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider">
-                 <option value="global">Global Phenomenon</option>
-                 <option value="selective">Target Team</option>
-              </select>
-
-              <select value={newInjection.eventType} onChange={e => setNewInjection({ ...newInjection, eventType: e.target.value as any })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider text-[#39ff14]">
-                 <option value="POINTS">Points Change</option>
-                 <option value="SPECIAL_RULE">Special Rule</option>
-                 {newInjection.type === 'global' && (
-                    <>
-                    <option value="MULTIPLIER">Multiplier Mod</option>
-                    <option value="FREEZE">Score Freeze</option>
-                    </>
-                 )}
-                 {newInjection.type === 'selective' && (
-                    <option value="CARD_DROP">Card Drop</option>
-                 )}
-              </select>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-3">
-              {newInjection.eventType === 'POINTS' && (
-                 <input type="number" placeholder="Pts" value={newInjection.points || ''} onChange={e => setNewInjection({...newInjection, points: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 text-sm text-center font-bold" />
-              )}
-              {newInjection.eventType === 'MULTIPLIER' && (
-                 <input type="number" step="0.1" placeholder="Mult (e.g. 2)" value={newInjection.multiplier || ''} onChange={e => setNewInjection({...newInjection, multiplier: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-blue-400 font-mono rounded-lg px-3 py-2 text-sm text-center font-bold" />
-              )}
-              
-              <div className="flex-1 w-full flex gap-3 relative">
-                 <div className="absolute top-1/2 -translate-y-1/2 left-3 text-[10px] uppercase font-bold text-zinc-500 pointer-events-none">Duration (sec)</div>
-                 <input type="number" placeholder="0 = Infinite" value={newInjection.duration || ''} onChange={e => setNewInjection({...newInjection, duration: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-700 text-amber-400 font-mono rounded-lg pl-28 pr-3 py-2 text-sm font-bold" />
-              </div>
-            </div>
-            
-            {newInjection.type === 'selective' && (
-              <div className="flex flex-col sm:flex-row gap-3">
-                <select value={newInjection.targetTeamId} onChange={e => setNewInjection({ ...newInjection, targetTeamId: e.target.value })} className="flex-1 bg-red-900/20 border border-red-500/50 text-red-200 rounded-lg px-3 py-2 text-xs" required={newInjection.type==='selective'}>
-                   <option value="" disabled>Select target team to inject...</option>
-                   {teams.map(t => <option key={t.id} value={t.id}>{t.teamName}</option>)}
-                </select>
-                {newInjection.eventType === 'CARD_DROP' && (
-                  <select value={newInjection.rewardCardId || ''} onChange={e => setNewInjection({ ...newInjection, rewardCardId: e.target.value })} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-zinc-400 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest">
-                     <option value="none">No Card Drop</option>
-                     <option value="random">🎲 Random Card</option>
-                     {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
-                  </select>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-3">
-               <input type="text" placeholder="Description & requirements..." value={newInjection.description} onChange={e => setNewInjection({...newInjection, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
-               
-               <div className="flex-1 w-full flex gap-3 relative">
-                  <div className="absolute top-1/2 -translate-y-1/2 left-3 text-[10px] uppercase font-bold text-zinc-500 pointer-events-none">Auto-Trigger @</div>
-                  <input type="number" placeholder="Seconds empty=now" value={newInjection.triggerAtRemainingTime || ''} onChange={e => setNewInjection({...newInjection, triggerAtRemainingTime: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg pl-28 pr-3 py-2 text-sm font-bold" />
-               </div>
-
-               <button type="submit" disabled={isAddingInjection || !newInjection.title || (newInjection.type === 'selective' && !newInjection.targetTeamId) || isLocked} className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/40 px-6 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Deploy</button>
-            </div>
-          </form>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-             {injections.map(inj => (
-               <div key={inj.id} className="flex justify-between items-center p-2 rounded-lg bg-zinc-800/30 border border-red-500/20">
-                 <div className="flex-1 line-clamp-1">
-                   <span className={`text-xs font-bold uppercase ${inj.status === 'active' ? 'text-red-400' : 'text-zinc-500'}`}>{inj.title}</span>
-                   <span className="text-[10px] text-zinc-500 ml-2">{inj.points} PTS</span>
-                 </div>
-                 <select value={inj.status} onChange={(e) => handleUpdateInjectionStatus(inj.id, inj.title, e.target.value)} className={`text-[10px] bg-zinc-900 border px-2 py-1 rounded uppercase tracking-widest font-bold ${inj.status === 'active' ? 'text-red-400 border-red-500' : 'text-zinc-500 border-zinc-700'}`}>
-                   <option value="active">Active</option>
-                   <option value="resolved">Resolved</option>
-                 </select>
-               </div>
-             ))}
-          </div>
-        </section>
-
-        {/* Manage Bounties */}
-        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
-          <h2 className="text-lg font-bold mb-4 text-purple-500 uppercase flex justify-between">
-            Bounty Board
-            <span className="text-xs text-zinc-500">{bounties.filter(b => b.status === 'active').length} Active</span>
-          </h2>
-          <form onSubmit={handleAddBounty} className="space-y-3 mb-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input type="text" placeholder="Bounty Objective" value={newBounty.title} onChange={e => setNewBounty({...newBounty, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
-              <input type="number" placeholder="Pts (e.g. 100)" value={newBounty.rewardPoints || ''} onChange={e => setNewBounty({...newBounty, rewardPoints: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-purple-400 font-mono rounded-lg px-3 py-2 text-sm text-center" />
-              <select value={newBounty.rewardCardId || ''} onChange={e => setNewBounty({ ...newBounty, rewardCardId: e.target.value })} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-purple-300 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest focus:border-purple-500 outline-none">
-                 <option value="none">No Card Drop</option>
-                 <option value="random">🎲 Random Card</option>
-                 {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-               <input type="text" placeholder="Description & rewards..." value={newBounty.description} onChange={e => setNewBounty({...newBounty, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
-               <button type="submit" disabled={isAddingBounty || !newBounty.title || isLocked} className="bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-4 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Issue</button>
-            </div>
-          </form>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-             {bounties.map(bounty => (
-               <div key={bounty.id} className="flex justify-between items-center p-2 rounded-lg bg-zinc-800/30 border border-purple-500/20">
-                 <div className="flex-1 line-clamp-1">
-                   <span className={`text-xs font-bold uppercase ${bounty.status === 'active' ? 'text-purple-400' : 'text-zinc-500'}`}>{bounty.title}</span>
-                   <span className="text-[10px] text-zinc-500 ml-2">+{bounty.rewardPoints} PTS</span>
-                 </div>
-                 {bounty.status === 'active' ? (
-                    <button type="button" disabled={isLocked} onClick={() => setCompletingBounty(bounty)} className="text-[10px] bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-3 py-1.5 rounded uppercase font-bold transition-colors disabled:opacity-50">
-                      Complete
-                    </button>
-                 ) : (
-                    <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest px-2">Finished</span>
-                 )}
-               </div>
-             ))}
-          </div>
-        </section>
       </div>
 
       {/* Team Listing & Control */}
@@ -1144,6 +922,279 @@ export default function ControlRoom() {
           </div>
         </div>
       </section>
+
+
+      <div className="mb-6"></div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Add Team */}
+        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col">
+          <h2 className="text-lg font-bold mb-4 text-[#39ff14] uppercase flex justify-between items-center">
+            Team Registry
+            <span className="text-xs text-zinc-500">{teams.length} Active</span>
+          </h2>
+          <form onSubmit={handleAddTeam} className="flex flex-col sm:flex-row gap-3 mb-4">
+            <input type="text" placeholder="Team Name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-[#39ff14] font-bold text-sm" disabled={isAddingTeam || isLocked} />
+            <button type="submit" disabled={isAddingTeam || !newTeamName.trim() || isLocked} className="bg-[#39ff14]/20 hover:bg-[#39ff14]/40 border border-[#39ff14] text-[#39ff14] px-6 py-2 rounded-lg font-black uppercase tracking-widest disabled:opacity-50 transition-colors text-sm">Deploy</button>
+          </form>
+          
+          <div className="flex-1 overflow-y-auto max-h-[160px] pr-2 space-y-1.5 border-t border-zinc-800/50 pt-3 scrollbar-thin scrollbar-thumb-zinc-700">
+             <div className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1.5 px-1 flex justify-between">
+                <span>Rank / Team ID</span>
+                <span>Power Level</span>
+             </div>
+             {[...teams].sort((a, b) => {
+                const sA = (a.review1||0) + (a.review2||0) + (a.review3||0) + (a.bonusPoints||0);
+                const sB = (b.review1||0) + (b.review2||0) + (b.review3||0) + (b.bonusPoints||0);
+                return sB - sA;
+             }).map((t, i) => {
+                const s = (t.review1||0) + (t.review2||0) + (t.review3||0) + (t.bonusPoints||0);
+                return (
+                  <div key={t.id} className="flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-800/80 px-3 py-1.5 rounded-md border border-zinc-800/60 transition-colors">
+                     <div className="flex gap-3 items-center">
+                        <span className={`text-[10px] uppercase font-black tracking-widest ${i===0?'text-yellow-400':i===1?'text-zinc-300':i===2?'text-amber-500':'text-zinc-500'}`}>#{i+1}</span>
+                        <span className="text-xs text-white font-bold max-w-[120px] sm:max-w-[160px] truncate">{t.teamName}</span>
+                     </div>
+                     <span className="text-[11px] font-mono text-[#39ff14] font-black tabular-nums">{s}</span>
+                  </div>
+                )
+             })}
+          </div>
+        </section>
+
+        {/* Deck Builder */}
+        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl flex flex-col gap-4">
+          <h2 className="text-lg font-bold text-[#39ff14] uppercase flex justify-between">
+            Deck Builder
+            <span className="text-xs text-zinc-500">{cards.length} Configured</span>
+          </h2>
+          
+          <form onSubmit={handleAddCard} className="space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <select value={newCard.icon} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center" required>
+                {Object.keys(CARD_ICONS).map(iconName => (
+                  <option key={iconName} value={iconName}>{iconName}</option>
+                ))}
+              </select>
+              <input type="text" placeholder="Card Name" value={newCard.name} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white" required />
+              <select 
+                value={newCard.type} 
+                onChange={e => {
+                  const newType = e.target.value as any;
+                  // Auto-switch icon based on category, user can override later
+                  let defaultIcon = newCard.icon;
+                  if (newType === 'COMMON') defaultIcon = 'Zap';
+                  if (newType === 'RARE') defaultIcon = 'Shield';
+                  if (newType === 'LEGENDARY') defaultIcon = 'Crown';
+                  
+                  setNewCard({...newCard, type: newType, icon: defaultIcon});
+                }} 
+                className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 font-bold uppercase tracking-widest text-xs"
+              >
+                <option value="COMMON" className="text-[#39ff14]">Common</option>
+                <option value="RARE" className="text-purple-400">Rare</option>
+                <option value="LEGENDARY" className="text-yellow-400">Legendary</option>
+              </select>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input type="text" placeholder="Description" value={newCard.description} onChange={e => setNewCard({...newCard, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white" />
+              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 uppercase placeholder:normal-case placeholder:text-zinc-600 tracking-wider" required />
+              <button type="submit" disabled={isAddingCard || !newCard.name || !newCard.effect || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 py-2 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
+            </div>
+          </form>
+
+          {/* Live Preview Panel */}
+          <div className="mt-2 pt-4 border-t border-zinc-800">
+             <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-500 mb-3">Live Hologram Preview</div>
+             <div className="max-w-[300px] mx-auto scale-95 origin-top">
+                {(() => {
+                   let borderClass = 'border-[#39ff14]/30 shadow-[0_0_15px_rgba(57,255,20,0.05)]';
+                   let glowClass = 'bg-[#39ff14]';
+                   let textClass = 'text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/10';
+                   let cardGlowEffect = '';
+                   
+                   if (newCard.type === 'RARE') {
+                      borderClass = 'border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10';
+                      glowClass = 'bg-purple-500';
+                      textClass = 'text-purple-400 border-purple-500/40 bg-purple-500/10';
+                   } else if (newCard.type === 'LEGENDARY') {
+                      borderClass = 'border-yellow-500/60 shadow-[0_0_25px_rgba(234,179,8,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-yellow-900/20';
+                      glowClass = 'bg-yellow-500';
+                      textClass = 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
+                      cardGlowEffect = 'animate-[pulse_4s_ease-in-out_infinite_alternate]';
+                   }
+
+                   const IconComp = CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] || CARD_ICONS.CircleSlash;
+
+                   return (
+                     <div className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass} ${cardGlowEffect}`}>
+                       <div className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-30 ${glowClass}`}></div>
+                       {newCard.type === 'LEGENDARY' && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none z-20"></div>
+                       )}
+                       
+                       <div className="flex flex-col h-full relative z-10 min-h-[160px]">
+                          <div className="flex items-start justify-between mb-4">
+                             <div className={`text-3xl p-3 rounded-2xl border bg-zinc-950 shadow-inner ${textClass}`}>
+                               <IconComp className="w-6 h-6 drop-shadow-[0_0_8px_currentColor]" />
+                             </div>
+                             <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded border shadow-sm ${textClass}`}>
+                               {newCard.type}
+                             </span>
+                          </div>
+                          <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight">{newCard.name || 'Undefined'}</h3>
+                          <p className="text-xs text-zinc-400 mb-6 flex-1 font-medium">{newCard.description || 'Awaiting structural data...'}</p>
+                          <div className="pt-3 border-t border-zinc-800">
+                             <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Effect Sequence</div>
+                             <div className={`text-xs font-mono font-black tracking-wider px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 ${textClass.split(' ')[0]}`}>
+                               {newCard.effect || 'NULL'}
+                             </div>
+                          </div>
+                       </div>
+                     </div>
+                   );
+                })()}
+             </div>
+          </div>
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Manage Injections */}
+        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
+          <h2 className="text-lg font-bold mb-4 text-red-500 uppercase flex justify-between">
+            Global Phenomena
+            <span className="text-xs text-zinc-500">{injections.filter(i => i.status === 'active').length} Active</span>
+          </h2>
+          <form onSubmit={handleAddInjection} className="space-y-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input type="text" placeholder="Phenomenon Title" value={newInjection.title} onChange={e => setNewInjection({...newInjection, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
+              
+              <select value={newInjection.type} onChange={e => setNewInjection({ ...newInjection, type: e.target.value as 'global' | 'selective', targetTeamId: '', eventType: 'POINTS' })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider">
+                 <option value="global">Global Phenomenon</option>
+                 <option value="selective">Target Team</option>
+              </select>
+
+              <select value={newInjection.eventType} onChange={e => setNewInjection({ ...newInjection, eventType: e.target.value as any })} className="bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider text-[#39ff14]">
+                 <option value="POINTS">Points Change</option>
+                 <option value="SPECIAL_RULE">Special Rule</option>
+                 {newInjection.type === 'global' && (
+                    <>
+                    <option value="MULTIPLIER">Multiplier Mod</option>
+                    <option value="FREEZE">Score Freeze</option>
+                    </>
+                 )}
+                 {newInjection.type === 'selective' && (
+                    <option value="CARD_DROP">Card Drop</option>
+                 )}
+              </select>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              {newInjection.eventType === 'POINTS' && (
+                 <input type="number" placeholder="Pts" value={newInjection.points || ''} onChange={e => setNewInjection({...newInjection, points: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 text-sm text-center font-bold" />
+              )}
+              {newInjection.eventType === 'MULTIPLIER' && (
+                 <input type="number" step="0.1" placeholder="Mult (e.g. 2)" value={newInjection.multiplier || ''} onChange={e => setNewInjection({...newInjection, multiplier: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-blue-400 font-mono rounded-lg px-3 py-2 text-sm text-center font-bold" />
+              )}
+              
+              <div className="flex-1 w-full flex items-center gap-1 relative border border-zinc-700 bg-zinc-900 rounded-lg p-1.5 px-2">
+                 <div className="text-[9px] uppercase font-bold text-zinc-500 pointer-events-none px-1">Dur</div>
+                 <input type="number" min="0" placeholder="HH" value={injDurHH} onChange={e => setInjDurHH(e.target.value)} className="w-8 sm:w-10 bg-zinc-950 font-mono text-amber-400 rounded px-1 py-1 text-center text-xs placeholder-zinc-600 outline-none focus:border-amber-500 border border-zinc-800" />
+                 <span className="text-zinc-600">:</span>
+                 <input type="number" min="0" max="59" placeholder="MM" value={injDurMM} onChange={e => setInjDurMM(e.target.value)} className="w-8 sm:w-10 bg-zinc-950 font-mono text-amber-400 rounded px-1 py-1 text-center text-xs placeholder-zinc-600 outline-none focus:border-amber-500 border border-zinc-800" />
+                 <span className="text-zinc-600">:</span>
+                 <input type="number" min="0" max="59" placeholder="SS" value={injDurSS} onChange={e => setInjDurSS(e.target.value)} className="w-8 sm:w-10 bg-zinc-950 font-mono text-amber-400 rounded px-1 py-1 text-center text-xs placeholder-zinc-600 outline-none focus:border-amber-500 border border-zinc-800" />
+              </div>
+            </div>
+            
+            {newInjection.type === 'selective' && (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select value={newInjection.targetTeamId} onChange={e => setNewInjection({ ...newInjection, targetTeamId: e.target.value })} className="flex-1 bg-red-900/20 border border-red-500/50 text-red-200 rounded-lg px-3 py-2 text-xs" required={newInjection.type==='selective'}>
+                   <option value="" disabled>Select target team to inject...</option>
+                   {teams.map(t => <option key={t.id} value={t.id}>{t.teamName}</option>)}
+                </select>
+                {newInjection.eventType === 'CARD_DROP' && (
+                  <select value={newInjection.rewardCardId || ''} onChange={e => setNewInjection({ ...newInjection, rewardCardId: e.target.value })} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-zinc-400 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest">
+                     <option value="none">No Card Drop</option>
+                     <option value="random">🎲 Random Card</option>
+                     {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3">
+               <input type="text" placeholder="Description & requirements..." value={newInjection.description} onChange={e => setNewInjection({...newInjection, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
+               
+               <div className="flex-1 w-full flex items-center gap-1 relative border border-zinc-700 bg-zinc-900 rounded-lg p-1.5 px-2">
+                  <div className="text-[9px] uppercase font-bold text-zinc-500 pointer-events-none px-1 pl-0">Trig</div>
+                  <input type="number" min="0" placeholder="HH" value={injTrigHH} onChange={e => setInjTrigHH(e.target.value)} className="w-8 sm:w-10 bg-zinc-950 font-mono text-[#39ff14] rounded px-1 py-1 text-center text-xs placeholder-zinc-600 outline-none focus:border-[#39ff14] border border-zinc-800" />
+                  <span className="text-zinc-600">:</span>
+                  <input type="number" min="0" max="59" placeholder="MM" value={injTrigMM} onChange={e => setInjTrigMM(e.target.value)} className="w-8 sm:w-10 bg-zinc-950 font-mono text-[#39ff14] rounded px-1 py-1 text-center text-xs placeholder-zinc-600 outline-none focus:border-[#39ff14] border border-zinc-800" />
+                  <span className="text-zinc-600">:</span>
+                  <input type="number" min="0" max="59" placeholder="SS" value={injTrigSS} onChange={e => setInjTrigSS(e.target.value)} className="w-8 sm:w-10 bg-zinc-950 font-mono text-[#39ff14] rounded px-1 py-1 text-center text-xs placeholder-zinc-600 outline-none focus:border-[#39ff14] border border-zinc-800" />
+               </div>
+
+               <button type="submit" disabled={isAddingInjection || !newInjection.title || (newInjection.type === 'selective' && !newInjection.targetTeamId) || isLocked} className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/40 px-6 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Deploy</button>
+            </div>
+          </form>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+             {injections.map(inj => (
+               <div key={inj.id} className="flex justify-between items-center p-2 rounded-lg bg-zinc-800/30 border border-red-500/20">
+                 <div className="flex-1 line-clamp-1">
+                   <span className={`text-xs font-bold uppercase ${inj.status === 'active' ? 'text-red-400' : 'text-zinc-500'}`}>{inj.title}</span>
+                   <span className="text-[10px] text-zinc-500 ml-2">{inj.points} PTS</span>
+                 </div>
+                 <select value={inj.status} onChange={(e) => handleUpdateInjectionStatus(inj.id, inj.title, e.target.value)} className={`text-[10px] bg-zinc-900 border px-2 py-1 rounded uppercase tracking-widest font-bold ${inj.status === 'active' ? 'text-red-400 border-red-500' : 'text-zinc-500 border-zinc-700'}`}>
+                   <option value="active">Active</option>
+                   <option value="resolved">Resolved</option>
+                 </select>
+               </div>
+             ))}
+          </div>
+        </section>
+
+        {/* Manage Bounties */}
+        <section className="glass-panel p-5 border border-zinc-800 rounded-2xl">
+          <h2 className="text-lg font-bold mb-4 text-purple-500 uppercase flex justify-between">
+            Bounty Board
+            <span className="text-xs text-zinc-500">{bounties.filter(b => b.status === 'active').length} Active</span>
+          </h2>
+          <form onSubmit={handleAddBounty} className="space-y-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input type="text" placeholder="Bounty Objective" value={newBounty.title} onChange={e => setNewBounty({...newBounty, title: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm" required />
+              <input type="number" placeholder="Pts (e.g. 100)" value={newBounty.rewardPoints || ''} onChange={e => setNewBounty({...newBounty, rewardPoints: Number(e.target.value)})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 text-purple-400 font-mono rounded-lg px-3 py-2 text-sm text-center" />
+              <select value={newBounty.rewardCardId || ''} onChange={e => setNewBounty({ ...newBounty, rewardCardId: e.target.value })} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-purple-300 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest focus:border-purple-500 outline-none">
+                 <option value="none">No Card Drop</option>
+                 <option value="random">🎲 Random Card</option>
+                 {cards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+               <input type="text" placeholder="Description & rewards..." value={newBounty.description} onChange={e => setNewBounty({...newBounty, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs" required />
+               <button type="submit" disabled={isAddingBounty || !newBounty.title || isLocked} className="bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-4 py-2 rounded-lg uppercase tracking-widest text-xs font-bold transition-colors disabled:opacity-50">Issue</button>
+            </div>
+          </form>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+             {bounties.map(bounty => (
+               <div key={bounty.id} className="flex justify-between items-center p-2 rounded-lg bg-zinc-800/30 border border-purple-500/20">
+                 <div className="flex-1 line-clamp-1">
+                   <span className={`text-xs font-bold uppercase ${bounty.status === 'active' ? 'text-purple-400' : 'text-zinc-500'}`}>{bounty.title}</span>
+                   <span className="text-[10px] text-zinc-500 ml-2">+{bounty.rewardPoints} PTS</span>
+                 </div>
+                 {bounty.status === 'active' ? (
+                    <button type="button" disabled={isLocked} onClick={() => setCompletingBounty(bounty)} className="text-[10px] bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-3 py-1.5 rounded uppercase font-bold transition-colors disabled:opacity-50">
+                      Complete
+                    </button>
+                 ) : (
+                    <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest px-2">Finished</span>
+                 )}
+               </div>
+             ))}
+          </div>
+        </section>
+      </div>
 
       {/* Bounty Completion Modal */}
       {completingBounty && (

@@ -7,7 +7,7 @@ import { Injection } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveGlobalPhenomena } from '@/lib/effectEngine';
 import { Globe } from 'lucide-react';
-import { playScoreSound, playRankChangeSound, playInjectionSound } from '@/lib/soundManager';
+import { playScoreSound, playRankChangeSound, playInjectionSound, playFreezeSound, playSpecialRuleSound } from '@/lib/soundManager';
 
 export default function GlobalEventBanner() {
   const [injections, setInjections] = useState<Injection[]>([]);
@@ -32,29 +32,35 @@ export default function GlobalEventBanner() {
   const activeGlobals = getActiveGlobalPhenomena(injections);
   const currentEvent = activeGlobals.length > 0 ? activeGlobals[0] : null;
 
-  // Sound Integration & Popup Dismissal
+  // Sound Integration
   useEffect(() => {
     if (currentEvent && currentEvent.id !== lastAnnouncedId) {
       if (currentEvent.eventType === 'POINTS') playScoreSound();
       else if (currentEvent.eventType === 'MULTIPLIER') playRankChangeSound();
-      else playInjectionSound(); // FREEZE, etc.
+      else if (currentEvent.eventType === 'FREEZE') playFreezeSound();
+      else if (currentEvent.eventType === 'SPECIAL_RULE') playSpecialRuleSound();
+      else playInjectionSound();
       
       setLastAnnouncedId(currentEvent.id);
       setVisibleEvent(currentEvent);
-
-      // Auto dismiss popup after 3 seconds
-      const timeout = setTimeout(() => {
-        setVisibleEvent(null);
-      }, 3000);
-
-      return () => clearTimeout(timeout);
     }
   }, [currentEvent, lastAnnouncedId]);
 
+  // Decoupled Popup Dismissal (Fixes timeout cancellation bug)
+  useEffect(() => {
+    if (visibleEvent) {
+      const timeout = setTimeout(() => {
+        setVisibleEvent(null);
+      }, 6000);
+      return () => clearTimeout(timeout);
+    }
+  }, [visibleEvent]);
+
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {visibleEvent && (
         <motion.div
+          key={visibleEvent.id}
           initial={{ opacity: 0, y: -100, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -100, scale: 0.9, transition: { ease: 'easeIn', duration: 0.4 } }}

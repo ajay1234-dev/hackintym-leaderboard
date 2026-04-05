@@ -129,9 +129,9 @@ export default function TopActivityBar() {
     return { logMessage, actionColor, iconColor, bgHighlight, borderLine };
   };
 
-  // We ONLY keep the absolute 2 newest logs for a tight layout.
-  // We slice first to get the newest 2, then reverse so the absolute newest is at index 1 (bottom).
-  const displayLogs = logs.slice(0, 2).reverse();
+  // Separate the most recent log from the older history
+  const mostRecentLog = logs[0];
+  const olderLogs = logs.slice(1, 15);
 
   return (
     <div className="relative mb-4 sm:mb-6 w-full z-20">
@@ -140,74 +140,99 @@ export default function TopActivityBar() {
         Live Feed
       </div>
 
-      <div className="relative glass-panel rounded-xl border neon-border h-[88px] overflow-hidden flex flex-col bg-black/40">
-        {/* Soft gradient masks at top and bottom for the cinematic fade out effect */}
-        <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-zinc-950 to-transparent z-10 pointer-events-none"></div>
-        <div className="absolute inset-x-0 bottom-0 h-4 bg-gradient-to-t from-zinc-950 to-transparent z-10 pointer-events-none"></div>
+      <div className="relative glass-panel rounded-xl border neon-border h-[88px] overflow-hidden flex flex-col bg-black/80">
+        <div className="w-full h-full relative overflow-hidden flex flex-col pt-1.5 pb-1 px-1.5">
+             {!mostRecentLog ? (
+                <div className="w-full h-full flex items-center justify-center text-center text-xs text-zinc-500 uppercase tracking-widest font-mono py-2">
+                  Standing by for uplink...
+                </div>
+             ) : (
+                <>
+                  {/* Fixed Recent Log */}
+                  <div className="w-full relative z-20 shrink-0">
+                    {(() => {
+                      const { logMessage, actionColor, bgHighlight, borderLine } = getLogDetails(mostRecentLog);
+                      const timeString = getTimeString(mostRecentLog.timestamp);
+                      const isFlash = flashId === mostRecentLog.id;
 
-        <div className="p-2 sm:p-3 flex flex-col gap-1.5 h-full">
-          <AnimatePresence mode="popLayout">
-            {displayLogs.length === 0 ? (
-               <motion.div key="empty" className="text-center text-xs text-zinc-500 uppercase tracking-widest font-mono py-2">
-                 Standing by for uplink...
-               </motion.div>
-            ) : (
-               displayLogs.map((log) => {
-                 const { logMessage, actionColor, bgHighlight, borderLine } = getLogDetails(log);
-                 const timeString = getTimeString(log.timestamp);
-                 const isFlash = flashId === log.id;
+                      return (
+                         <div
+                           key={`recent-${mostRecentLog.id}`}
+                           className={`flex gap-3 items-center px-3 py-2 rounded-lg border-l-2 ${borderLine} ${bgHighlight} bg-zinc-900 w-full relative overflow-hidden transition-all duration-300 ${isFlash ? 'bg-white/20 scale-[1.01] shadow-[0_0_15px_white]' : ''}`}
+                         >
+                            {isFlash && (
+                              <motion.div 
+                                className="absolute inset-0 bg-white/20 pointer-events-none"
+                                initial={{ opacity: 1 }}
+                                animate={{ opacity: 0 }}
+                                transition={{ duration: 0.8 }}
+                              />
+                            )}
+                            <div className="text-zinc-500 shrink-0 flex items-center justify-center w-4 h-4">
+                              {mostRecentLog.actionType === 'score' ? <span className="text-[#39ff14] drop-shadow-md">⚡</span> : mostRecentLog.actionType === 'bounty' ? <Target size={12} className="text-purple-500" /> : <Clock size={12} />}
+                            </div>
+                            
+                            <div className="flex-1 min-w-0 flex items-center gap-3 overflow-hidden z-10">
+                                <span className="text-[10px] items-center px-1.5 py-0.5 rounded-sm font-mono text-white bg-zinc-800/80 shrink-0 border border-zinc-600 shadow-[0_0_8px_rgba(255,255,255,0.15)] font-bold">
+                                   {timeString}
+                                </span>
+                                {mostRecentLog.teamName && (
+                                  <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-300 bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 rounded-sm shrink-0">
+                                    {mostRecentLog.teamName}
+                                  </span>
+                                )}
+                                <span className={`text-xs sm:text-sm truncate max-w-full font-bold tracking-wide ${actionColor}`} title={logMessage}>
+                                  {logMessage}
+                                </span>
+                            </div>
+                         </div>
+                      );
+                    })()}
+                  </div>
 
-                 return (
-                    <motion.div
-                      layout
-                      key={log.id}
-                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                      animate={{ 
-                        opacity: 1, 
-                        y: 0, 
-                        scale: 1,
-                        backgroundColor: isFlash ? 'rgba(255,255,255,0.1)' : undefined
-                      }}
-                      exit={{ opacity: 0, y: -20, scale: 0.95, transition: { duration: 0.4 } }}
-                      transition={{ 
-                         duration: 0.5, 
-                         type: 'spring', 
-                         stiffness: 300, 
-                         damping: 30 
-                      }}
-                      className={`flex gap-3 items-center p-2 rounded-lg border-l-2 ${borderLine} ${bgHighlight} bg-zinc-900/40 w-full relative overflow-hidden`}
-                    >
-                       {isFlash && (
-                         <motion.div 
-                           className="absolute inset-0 bg-white/20"
-                           initial={{ opacity: 1 }}
-                           animate={{ opacity: 0 }}
-                           transition={{ duration: 0.8 }}
-                         />
-                       )}
-                       
-                       <div className="text-zinc-500 shrink-0 flex items-center justify-center w-4 h-4 ml-1">
-                         {log.actionType === 'score' ? <span className="text-[#39ff14] drop-shadow-md">⚡</span> : log.actionType === 'bounty' ? <Target size={12} className="text-purple-500" /> : <Clock size={12} />}
-                       </div>
-                       
-                       <div className="flex-1 min-w-0 flex items-center gap-3 overflow-hidden z-10">
-                           <span className="text-[10px] items-center px-1.5 rounded-sm font-mono text-zinc-500 bg-black/80 shrink-0 border border-zinc-800">
-                              {timeString}
-                           </span>
-                           {log.teamName && (
-                             <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-300 bg-zinc-800 border border-zinc-700/50 px-1.5 py-0.5 rounded-sm shrink-0">
-                               {log.teamName}
-                             </span>
-                           )}
-                           <span className={`text-[11px] sm:text-xs truncate max-w-full font-bold tracking-wide ${actionColor}`} title={logMessage}>
-                             {logMessage}
-                           </span>
-                       </div>
-                    </motion.div>
-                 );
-               })
-            )}
-          </AnimatePresence>
+                  {/* Horizontal Scrolling Older Logs */}
+                  {olderLogs.length > 0 && (
+                     <div className="w-full flex-1 overflow-hidden relative flex items-center mt-1 pt-1 border-t border-zinc-800/30">
+                        <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-zinc-950 to-transparent z-10 pointer-events-none"></div>
+                        <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-zinc-950 to-transparent z-10 pointer-events-none"></div>
+                        
+                        <motion.div
+                          animate={{ x: ["0%", "-50%"] }}
+                          transition={{ 
+                             ease: "linear", 
+                             duration: Math.max(olderLogs.length * 4, 10), 
+                             repeat: Infinity 
+                          }}
+                          className="flex w-max gap-4 px-4 items-center h-full"
+                        >
+                          {[...olderLogs, ...olderLogs].map((log, index) => {
+                            const { logMessage, actionColor, borderLine } = getLogDetails(log);
+                            const timeString = getTimeString(log.timestamp);
+
+                            return (
+                               <div
+                                 key={`old-${log.id}-${index}`}
+                                 className={`flex gap-2 items-center px-3 py-1 rounded border-l-2 ${borderLine} bg-zinc-900/50 whitespace-nowrap`}
+                               >
+                                  <span className="text-[9px] items-center px-1.5 py-[1px] rounded-sm font-mono text-zinc-300 bg-zinc-800 shrink-0 border border-zinc-700 font-bold">
+                                     {timeString}
+                                  </span>
+                                  {log.teamName && (
+                                    <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-400">
+                                      [{log.teamName}]
+                                    </span>
+                                  )}
+                                  <span className={`text-[10px] sm:text-xs font-bold tracking-wide ${actionColor}`}>
+                                    {logMessage}
+                                  </span>
+                               </div>
+                            );
+                          })}
+                        </motion.div>
+                     </div>
+                  )}
+                </>
+             )}
         </div>
       </div>
     </div>

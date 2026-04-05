@@ -48,3 +48,12 @@ body {
   color: var(--color-neon-green);
   text-shadow: 0 0 8px var(--color-neon-green-glow);
 }
+
+/* Hide scrollbars globally but retain scrolling functionality */
+*::-webkit-scrollbar {
+  display: none;
+}
+* {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}

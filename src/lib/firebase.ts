@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 // Validate required environment variables statically (Next.js requires explicit literal access)
@@ -28,7 +28,11 @@ const firebaseConfig = {
 
 // Initialize Firebase only if config is valid or in development
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getFirestore(app);
+
+// Use experimentalAutoDetectLongPolling to explicitly prevent WebChannel 'Listen' stream transport errors in Next.js dev environment
+const db = !getApps().length 
+  ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }) 
+  : getFirestore(app);
 const auth = getAuth(app);
 
 // Export configuration status
