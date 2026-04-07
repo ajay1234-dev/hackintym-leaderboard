@@ -7,7 +7,7 @@ import { ActivityLog, Card } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Clock, ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { useGlobalEffects } from './GlobalEffectsContext';
-import { playActivitySound, playBountySound, playInjectionSound } from '@/lib/soundManager';
+import { playActivitySound, playBountySound, playInjectionSound, playCardActivateSound } from '@/lib/soundManager';
 
 export default function TopActivityBar() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -38,6 +38,8 @@ export default function TopActivityBar() {
                playBountySound();
             } else if (topLog.actionType === 'injection' || rawMsg.includes('Injection')) {
                playInjectionSound();
+            } else if ((topLog.actionType === 'card' || rawMsg.toLowerCase().includes('card')) && (rawMsg.toLowerCase().includes('used') || rawMsg.toLowerCase().includes('executed'))) {
+               playCardActivateSound();
             } else if (topLog.actionType !== 'card' && topLog.actionType !== 'score') {
                // Subtly play activity for general events, skip cards/scores since they natively sound
                playActivitySound();

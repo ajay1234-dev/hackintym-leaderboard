@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { playHourAlertSound, playTickingSound, playTimeUpSound } from '@/lib/soundManager';
+import { playHourPassedSound, playTickingSound, playTimeUpSound } from '@/lib/soundManager';
 
 export default function GlobalTimer() {
   const [endTime, setEndTime] = useState<number | null>(null);
@@ -47,10 +47,10 @@ export default function GlobalTimer() {
        }
 
        if (remainingSeconds > 0 && !hasEnded) {
-          // Play hourly alert EXACTLY on the hour boundary (e.g. 1h 00m 00s remaining)
-          const isExactHour = remainingSeconds > 0 && ((remainingSeconds % 3600) === 0);
-          if (isExactHour && lastPlayedHour.current !== remainingSeconds) {
-             playHourAlertSound();
+          // Play alert EXACTLY on every 2-hour boundary (e.g. 30h, 28h, 26h remaining)
+          const isExactBoundary = remainingSeconds > 0 && ((remainingSeconds % 7200) === 0);
+          if (isExactBoundary && lastPlayedHour.current !== remainingSeconds) {
+             playHourPassedSound();
              lastPlayedHour.current = remainingSeconds;
           }
 

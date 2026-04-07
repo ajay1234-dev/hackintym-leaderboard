@@ -22,7 +22,9 @@ const AUDIO_FILES = [
   "/sounds/activity.mp3",
   "/sounds/hour-alert.mp3",
   "/sounds/ticking.mp3",
-  "/sounds/time-up.mp3"
+  "/sounds/hour-passed.mp3",
+  "/sounds/time-up.mp3",
+  "/sounds/card-activate.mp3"
 ];
 
 const audioCache: Record<string, HTMLAudioElement> = {};
@@ -70,6 +72,7 @@ export const playTopTenSound = () => playWithPriority("/sounds/top-ten.mp3", 0.7
 export const playScoreSound = () => playWithPriority("/sounds/score.mp3", 0.4, 1);
 export const playScoreDeductSound = () => playWithPriority("/sounds/score-deduct.mp3", 0.5, 1);
 export const playCardSound = () => playWithPriority("/sounds/card.mp3", 0.6, 2);
+export const playCardActivateSound = () => playWithPriority("/sounds/card-activate.mp3", 0.65, 3);
 export const playBountySound = () => playWithPriority("/sounds/bounty.mp3", 0.7, 2);
 export const playInjectionSound = () => playWithPriority("/sounds/injection-alert.mp3", 0.65, 3);
 export const playFreezeSound = () => playWithPriority("/sounds/freeze.mp3", 0.7, 3);
@@ -77,5 +80,6 @@ export const playSpecialRuleSound = () => playWithPriority("/sounds/special-rule
 export const playResolveSound = () => playWithPriority("/sounds/resolve.mp3", 0.65, 3);
 export const playActivitySound = () => playWithPriority("/sounds/activity.mp3", 0.3, 1);
 export const playHourAlertSound = () => playWithPriority("/sounds/hour-alert.mp3", 0.6, 3);
+export const playHourPassedSound = () => playWithPriority("/sounds/hour-passed.mp3", 0.7, 4);
 export const playTickingSound = () => playWithPriority("/sounds/ticking.mp3", 0.5, 1);
 export const playTimeUpSound = () => playWithPriority("/sounds/time-up.mp3", 0.8, 3);
