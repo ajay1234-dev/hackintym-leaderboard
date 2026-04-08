@@ -39,8 +39,17 @@ const AUDIO_FILES = [
   "/sounds/ticking.mp3",
   "/sounds/hour-passed.mp3",
   "/sounds/time-up.mp3",
-  "/sounds/card-activate.mp3"
+  "/sounds/card-activate.mp3",
+  "/sounds/casino-reveal.mp3",
+  "/sounds/lock-thud.mp3",
+  "/sounds/final-impact.mp3"
 ];
+
+let isMutedForBulkReveal = false;
+
+export const setMutedForBulkReveal = (mute: boolean) => {
+  isMutedForBulkReveal = mute;
+};
 
 if (typeof window !== 'undefined') {
   // Pre-fetch all audio files as ArrayBuffers into memory for instant, network-free playback later
@@ -96,11 +105,11 @@ const playWithPriority = (src: string, volume = 0.5, priority = 1) => {
 };
 
 export const playCelebrationSound = () => playWithPriority("/sounds/celebration.mp3", 0.6, 2);
-export const playRankChangeSound = () => playWithPriority("/sounds/rank-up.mp3", 0.7, 2);
-export const playTopThreeSound = () => playWithPriority("/sounds/top-three.mp3", 0.75, 4);
-export const playTopTenSound = () => playWithPriority("/sounds/top-ten.mp3", 0.7, 3);
-export const playScoreSound = () => playWithPriority("/sounds/score.mp3", 0.4, 1);
-export const playScoreDeductSound = () => playWithPriority("/sounds/score-deduct.mp3", 0.5, 1);
+export const playRankChangeSound = () => !isMutedForBulkReveal && playWithPriority("/sounds/rank-up.mp3", 0.7, 2);
+export const playTopThreeSound = () => !isMutedForBulkReveal && playWithPriority("/sounds/top-three.mp3", 0.75, 4);
+export const playTopTenSound = () => !isMutedForBulkReveal && playWithPriority("/sounds/top-ten.mp3", 0.7, 3);
+export const playScoreSound = () => !isMutedForBulkReveal && playWithPriority("/sounds/score.mp3", 0.4, 1);
+export const playScoreDeductSound = () => !isMutedForBulkReveal && playWithPriority("/sounds/score-deduct.mp3", 0.5, 1);
 export const playCardSound = () => playWithPriority("/sounds/card.mp3", 0.6, 2);
 export const playCardActivateSound = () => playWithPriority("/sounds/card-activate.mp3", 0.65, 3);
 export const playBountySound = () => playWithPriority("/sounds/bounty.mp3", 0.7, 2);
@@ -108,8 +117,26 @@ export const playInjectionSound = () => playWithPriority("/sounds/injection-aler
 export const playFreezeSound = () => playWithPriority("/sounds/freeze.mp3", 0.7, 3);
 export const playSpecialRuleSound = () => playWithPriority("/sounds/special-rule.mp3", 0.65, 3);
 export const playResolveSound = () => playWithPriority("/sounds/resolve.mp3", 0.65, 3);
-export const playActivitySound = () => playWithPriority("/sounds/activity.mp3", 0.3, 1);
+export const playActivitySound = () => !isMutedForBulkReveal && playWithPriority("/sounds/activity.mp3", 0.3, 1);
 export const playHourAlertSound = () => playWithPriority("/sounds/hour-alert.mp3", 0.6, 3);
 export const playHourPassedSound = () => playWithPriority("/sounds/hour-passed.mp3", 0.7, 4);
 export const playTickingSound = () => playWithPriority("/sounds/ticking.mp3", 0.5, 1);
 export const playTimeUpSound = () => playWithPriority("/sounds/time-up.mp3", 0.8, 3);
+export const playBulkRevealSound = () => playWithPriority("/sounds/casino-reveal.mp3", 0.8, 5);
+export const playLockThudSound = () => playWithPriority("/sounds/lock-thud.mp3", 0.7, 4);
+export const playFinalImpactSound = () => playWithPriority("/sounds/final-impact.mp3", 1.0, 6);
+
+export const speakText = (text: string, delayMs = 0) => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  setTimeout(() => {
+    window.speechSynthesis.cancel(); // kill existing speech
+    const msg = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    // Prefer English digital/robotic voices
+    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Microsoft Mark') || v.name.includes('Zira')));
+    if (preferredVoice) msg.voice = preferredVoice;
+    msg.pitch = 0.85; // slightly deeper, authoritative
+    msg.rate = 1.05; // slightly faster
+    window.speechSynthesis.speak(msg);
+  }, delayMs);
+};

@@ -11,7 +11,10 @@ import { useGlobalEffects, useTeamHighlight } from './GlobalEffectsContext';
 import { useCardDetection } from '@/hooks/useCardDetection';
 import { CARD_ICONS } from '@/lib/icons';
 import { Info } from 'lucide-react';
-import { playRankChangeSound, playScoreSound, playTopThreeSound, playTopTenSound } from '@/lib/soundManager';
+import { playRankChangeSound, playScoreSound, playTopThreeSound, playTopTenSound, playBulkRevealSound, playResolveSound, setMutedForBulkReveal, playLockThudSound, playFinalImpactSound, speakText, playCelebrationSound } from '@/lib/soundManager';
+import { doc } from 'firebase/firestore';
+
+export type RevealPhase = 'IDLE' | 'COUNTDOWN' | 'ROLLING' | 'WAVE_LOCKING' | 'POST_REVEAL';
 
 // Extend Team to include totalScore locally for sorting and display
 interface TeamWithScore extends Team {
@@ -19,7 +22,7 @@ interface TeamWithScore extends Team {
 }
 
 // Sub-component for animating review score updates
-function AnimatedReviewCell({ value, color, prefix = '' }: { value: number, color: 'blue' | 'yellow' | 'gray' | 'golden', prefix?: string }) {
+function AnimatedReviewCell({ value, color, prefix = '', isRolling = false }: { value: number, color: 'blue' | 'yellow' | 'gray' | 'golden', prefix?: string, isRolling?: boolean }) {
   const [prevValue, setPrevValue] = useState(value);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -55,24 +58,51 @@ function AnimatedReviewCell({ value, color, prefix = '' }: { value: number, colo
       whileHover={{ scale: 1.1 }}
       className={`text-lg md:text-xl font-semibold font-mono transition-all duration-300 cursor-default ${styles}`}
     >
-      {prefix}<AnimatedScore value={value} />
+      {prefix}<AnimatedScore value={value} isRolling={isRolling} />
     </motion.div>
   );
 }
 
 // Sub-component for individual rows to track their own state changes
-function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, index: number, renderCard: (id: string, isUsed: boolean, i: number) => React.ReactNode }) {
-  const [prevScore, setPrevScore] = useState(team.totalScore);
+function LeaderboardRow({ team, index, totalRows, renderCard, revealPhase }: { team: TeamWithScore, index: number, totalRows: number, renderCard: (id: string, isUsed: boolean, i: number) => React.ReactNode, revealPhase: RevealPhase }) {
+  const prevScore = useRef(team.totalScore);
   const [delta, setDelta] = useState<number | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const { triggerPoints } = useGlobalEffects();
   const { isHighlighted } = useTeamHighlight(team.id);
 
+  // Stagger calculation for Wave Locking
+  const [isRolling, setIsRolling] = useState(false);
+  const isRollingRef = useRef(false);
+
   useEffect(() => {
-    if (team.totalScore !== prevScore) {
-      const d = team.totalScore - prevScore;
+    if (revealPhase === 'COUNTDOWN' || revealPhase === 'ROLLING') {
+      if (!isRollingRef.current) {
+         setIsRolling(true);
+         isRollingRef.current = true;
+      }
+    } else if (revealPhase === 'WAVE_LOCKING') {
+      if (isRollingRef.current) {
+        const lockDelayMs = (totalRows - 1 - index) * 300;
+        const extraSilence = index === 0 ? 200 : 0;
+        const timeout = setTimeout(() => {
+          setIsRolling(false);
+          isRollingRef.current = false;
+          playLockThudSound();
+        }, lockDelayMs + extraSilence);
+        return () => clearTimeout(timeout);
+      }
+    } else if (revealPhase === 'IDLE' || revealPhase === 'POST_REVEAL') {
+      setIsRolling(false);
+      isRollingRef.current = false;
+    }
+  }, [revealPhase, index, totalRows]);
+
+  useEffect(() => {
+    if (team.totalScore !== prevScore.current) {
+      const d = team.totalScore - prevScore.current;
       setDelta(d);
-      setPrevScore(team.totalScore);
+      prevScore.current = team.totalScore;
       
       if (d > 0) {
         playScoreSound();
@@ -82,11 +112,16 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
         const rect = rowRef.current.getBoundingClientRect();
         triggerPoints(d, rect.right - 50, rect.top + rect.height / 2);
       }
+    }
+  }, [team.totalScore, triggerPoints]);
 
-      const timeout = setTimeout(() => setDelta(null), 2000);
+  // Handle the glow timeout cleanly so React StrictMode double-rendering doesn't destroy it
+  useEffect(() => {
+    if (delta !== null) {
+      const timeout = setTimeout(() => setDelta(null), 5000);
       return () => clearTimeout(timeout);
     }
-  }, [team.totalScore, prevScore, triggerPoints]);
+  }, [delta]);
 
   // Determine baseline container styling based on tier
   let defaultBg = 'bg-zinc-900/30 border-zinc-800/50 hover:bg-zinc-800/40 opacity-70 grayscale-[0.3]'; // 11th and below
@@ -96,7 +131,9 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
     defaultBg = 'bg-zinc-800/20 border-cyan-900/30 hover:bg-zinc-800/40 hover:border-cyan-700/50'; // Top 10
   }
 
-  const glowClass = delta 
+  const glowClass = (revealPhase === 'POST_REVEAL' && index < 3)
+    ? 'bg-[rgba(250,204,21,0.2)] border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)] z-30 animate-pulse'
+    : delta 
     ? (delta > 0 
         ? 'bg-[rgba(57,255,20,0.15)] border-[#39ff14]/50 shadow-[0_0_15px_rgba(57,255,20,0.2)] z-20' 
         : 'bg-[rgba(239,68,68,0.15)] border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] z-20')
@@ -151,13 +188,13 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
       
       {/* Reviews */}
       <div className="hidden lg:flex col-span-1 justify-center">
-        <AnimatedReviewCell value={team.review1} color="blue" />
+        <AnimatedReviewCell value={team.review1} color="blue" isRolling={isRolling} />
       </div>
       <div className="hidden lg:flex col-span-1 justify-center">
-        <AnimatedReviewCell value={team.review2} color="yellow" />
+        <AnimatedReviewCell value={team.review2} color="yellow" isRolling={isRolling} />
       </div>
       <div className="hidden lg:flex col-span-1 justify-center">
-        <AnimatedReviewCell value={team.review3} color="gray" />
+        <AnimatedReviewCell value={team.review3} color="gray" isRolling={isRolling} />
       </div>
 
       {/* Power Cards */}
@@ -189,6 +226,7 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
              value={team.bonusPoints} 
              color="golden" 
              prefix={team.bonusPoints > 0 ? '+' : ''} 
+             isRolling={isRolling}
           />
       </div>
 
@@ -201,7 +239,8 @@ function LeaderboardRow({ team, index, renderCard }: { team: TeamWithScore, inde
         >
           <AnimatedScore 
             value={team.totalScore}
-            className="text-lg sm:text-2xl md:text-3xl font-mono font-black block relative z-10 text-[#39ff14] [text-shadow:0_0_15px_rgba(57,255,20,0.8)]"
+            isRolling={isRolling}
+            className={`text-lg sm:text-2xl md:text-3xl font-mono font-black block relative z-10 text-[#39ff14] [text-shadow:0_0_15px_rgba(57,255,20,0.8)]`}
           />
         </motion.div>
       </div>
@@ -213,6 +252,8 @@ export default function Leaderboard() {
   const [teams, setTeams] = useState<TeamWithScore[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
+  const [revealPhase, setRevealPhase] = useState<RevealPhase>('IDLE');
+  const [bulkRevealData, setBulkRevealData] = useState<any>(null);
   const { showTooltip, hideTooltip, showCardCelebration, triggerTeamHighlight } = useGlobalEffects();
   const isFirstRender = useRef(true);
   const prevRanks = useRef<Record<string, number>>({});
@@ -318,11 +359,78 @@ export default function Leaderboard() {
       setCards(cardsData);
     });
 
+    // Listen to bulk reveal events
+    const unsubscribeReveal = onSnapshot(doc(db, 'globalState', 'bulkReveal'), (snapshot) => {
+      if (!isFirstRender.current) {
+         setBulkRevealData(snapshot.data());
+      }
+    });
+
     return () => {
       unsubscribeTeams();
       unsubscribeCards();
+      unsubscribeReveal();
     };
   }, []);
+
+  useEffect(() => {
+    if (!bulkRevealData?.isActive) return;
+
+    const timeSinceTrigger = Date.now() - (bulkRevealData.triggerTime || 0);
+    const countdownMs = bulkRevealData.countdownMs || 3000;
+    const rollDurationMs = bulkRevealData.rollDurationMs || 4000;
+    const staggerDelayMs = bulkRevealData.staggerDelayMs || 300;
+    
+    // Fallback if teams aren't loaded yet
+    const totalRowsLocal = teams.length || 10;
+    const totalWaveTime = totalRowsLocal * staggerDelayMs + 200;
+
+    const timeouts: NodeJS.Timeout[] = [];
+
+    // Reset flow
+    if (timeSinceTrigger < countdownMs) {
+      setRevealPhase('COUNTDOWN');
+      setMutedForBulkReveal(true);
+      speakText("Systems locked. Processing final scores in three... two... one...", 300);
+      
+      timeouts.push(setTimeout(() => {
+         setRevealPhase('ROLLING');
+         playBulkRevealSound();
+      }, countdownMs - timeSinceTrigger));
+    } 
+    
+    if (timeSinceTrigger < countdownMs + rollDurationMs) {
+      if (timeSinceTrigger >= countdownMs) {
+         setRevealPhase('ROLLING');
+         setMutedForBulkReveal(true);
+      }
+      
+      timeouts.push(setTimeout(() => {
+         setRevealPhase('WAVE_LOCKING');
+      }, countdownMs + rollDurationMs - timeSinceTrigger));
+    }
+
+    if (timeSinceTrigger < countdownMs + rollDurationMs + totalWaveTime) {
+      if (timeSinceTrigger >= countdownMs + rollDurationMs) {
+         setRevealPhase('WAVE_LOCKING');
+         setMutedForBulkReveal(true);
+      }
+
+      timeouts.push(setTimeout(() => {
+         setRevealPhase('POST_REVEAL');
+         playFinalImpactSound();
+         playCelebrationSound();
+         speakText("The leaderboard is updated.", 500);
+      }, countdownMs + rollDurationMs + totalWaveTime - timeSinceTrigger));
+    }
+
+    timeouts.push(setTimeout(() => {
+      setRevealPhase('IDLE');
+      setMutedForBulkReveal(false);
+    }, countdownMs + rollDurationMs + totalWaveTime + 5000 - timeSinceTrigger));
+
+    return () => timeouts.forEach(clearTimeout);
+  }, [bulkRevealData?.triggerTime, teams.length]);
 
   if (loading) {
     return (
@@ -368,41 +476,90 @@ export default function Leaderboard() {
   };
 
   return (
-    <div className="glass-panel rounded-2xl overflow-hidden neon-border flex-1 flex flex-col max-h-[600px] sm:max-h-[700px] md:max-h-[800px]">
-      {/* Real-time Card Status Note */}
-      <div className="bg-blue-900/20 border-b border-blue-500/20 px-3 sm:px-4 py-2 flex items-center justify-center gap-2">
-         <Info size={12} className="sm:w-3.5 sm:h-3.5 text-blue-400" />
-         <span className="text-[10px] sm:text-[11px] text-blue-200/80 font-mono uppercase tracking-widest leading-tight">
-           Cards shown = available usable cards
-         </span>
-      </div>
-
-      {/* Table Header */}
-      <div className="grid grid-cols-12 gap-1 sm:gap-2 md:gap-4 p-2 sm:p-4 border-b border-zinc-800 bg-zinc-900/80 text-[9px] sm:text-[10px] md:text-xs font-bold uppercase tracking-wider text-zinc-400">
-        <div className="col-span-2 lg:col-span-1 text-center">#</div>
-        <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 text-left pl-1 sm:pl-2">Team</div>
-        <div className="hidden lg:block col-span-1 text-center">R1</div>
-        <div className="hidden lg:block col-span-1 text-center">R2</div>
-        <div className="hidden lg:block col-span-1 text-center">R3</div>
-        <div className="col-span-3 sm:col-span-4 md:col-span-4 lg:col-span-3 text-left pl-1 sm:pl-2">Cards</div>
-        <div className="hidden md:block col-span-1 text-center">Bonus</div>
-        <div className="col-span-2 text-right pr-1 sm:pr-2">Score</div>
-      </div>
+    <div className="flex flex-col h-full rounded-2xl glass-panel border border-zinc-800 overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-zinc-950/90">
       
-      {/* Table Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
-        <AnimatePresence>
-          {teams.map((team, index) => (
-            <LeaderboardRow key={team.id} team={team} index={index} renderCard={renderCard} />
-          ))}
-        </AnimatePresence>
+      {/* UI Interaction Lock Overlay */}
+      {(revealPhase !== 'IDLE' && revealPhase !== 'POST_REVEAL') && (
+         <div className="fixed inset-0 z-[100] cursor-not-allowed"></div>
+      )}
+
+      {/* Cinematic Phase Glow Overlays */}
+      <AnimatePresence>
+         {revealPhase === 'COUNTDOWN' && (
+           <motion.div 
+             initial={{ opacity: 0 }} 
+             animate={{ opacity: 1 }} 
+             exit={{ opacity: 0 }}
+             className="absolute inset-0 bg-black/60 z-40 backdrop-blur-sm pointer-events-none flex items-center justify-center"
+           >
+              <CountdownOverlay />
+           </motion.div>
+         )}
+      </AnimatePresence>
+
+      <motion.div 
+         animate={{ scale: revealPhase !== 'IDLE' && revealPhase !== 'POST_REVEAL' ? 1.02 : 1 }} 
+         transition={{ duration: 1, ease: 'easeInOut' }}
+         className="flex flex-col h-full w-full"
+      >
+        {/* Real-time Card Status Note */}
+        <div className="bg-blue-900/20 border-b border-blue-500/20 px-3 sm:px-4 py-2 flex items-center justify-center gap-2">
+           <Info size={12} className="sm:w-3.5 sm:h-3.5 text-blue-400" />
+           <span className="text-[10px] sm:text-[11px] text-blue-200/80 font-mono uppercase tracking-widest leading-tight">
+             Cards shown = available usable cards
+           </span>
+        </div>
+
+        {/* Table Header */}
+        <div className="grid grid-cols-12 gap-1 sm:gap-2 md:gap-4 p-2 sm:p-4 border-b border-zinc-800 bg-zinc-900/80 text-[9px] sm:text-[10px] md:text-xs font-bold uppercase tracking-wider text-zinc-400">
+          <div className="col-span-2 lg:col-span-1 text-center">#</div>
+          <div className="col-span-5 sm:col-span-4 md:col-span-3 lg:col-span-2 text-left pl-1 sm:pl-2">Team</div>
+          <div className="hidden lg:block col-span-1 text-center">R1</div>
+          <div className="hidden lg:block col-span-1 text-center">R2</div>
+          <div className="hidden lg:block col-span-1 text-center">R3</div>
+          <div className="col-span-3 sm:col-span-4 md:col-span-4 lg:col-span-3 text-left pl-1 sm:pl-2">Cards</div>
+          <div className="hidden md:block col-span-1 text-center">Bonus</div>
+          <div className="col-span-2 text-right pr-1 sm:pr-2">Score</div>
+        </div>
         
-        {teams.length === 0 && (
-          <div className="text-center py-16 text-zinc-500 italic uppercase tracking-widest text-sm">
-            Initializing Arena... No teams found.
-          </div>
-        )}
-      </div>
+        {/* Table Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
+          <AnimatePresence>
+            {teams.map((team, index) => (
+              <LeaderboardRow key={team.id} team={team} index={index} totalRows={teams.length} renderCard={renderCard} revealPhase={revealPhase} />
+            ))}
+          </AnimatePresence>
+          
+          {teams.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center text-zinc-600 font-bold uppercase tracking-widest bg-zinc-900/50 rounded-xl backdrop-blur-sm border border-zinc-800/50 m-4">
+              No Teams Found
+            </div>
+          )}
+        </div>
+      </motion.div>
     </div>
+  );
+}
+
+// Sub-component for large screen countdown
+function CountdownOverlay() {
+  const [count, setCount] = useState(3);
+  useEffect(() => {
+    const t1 = setTimeout(() => setCount(2), 1000);
+    const t2 = setTimeout(() => setCount(1), 2000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  return (
+    <motion.div 
+       key={count}
+       initial={{ scale: 3, opacity: 0 }}
+       animate={{ scale: 1, opacity: 1 }}
+       exit={{ scale: 0.5, opacity: 0 }}
+       transition={{ type: 'spring', duration: 0.5 }}
+       className="text-[200px] font-black text-white drop-shadow-[0_0_50px_rgba(255,255,255,0.5)]"
+    >
+       {count}
+    </motion.div>
   );
 }

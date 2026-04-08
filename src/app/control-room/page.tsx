@@ -56,7 +56,7 @@ export default function ControlRoom() {
   const [injTrigSS, setInjTrigSS] = useState('');
 
   // Manual Score State
-  const [draftScores, setDraftScores] = useState<Record<string, Partial<Team>>>({});
+  const [draftScores, setDraftScores] = useState<Record<string, Record<string, string | number>>>({});
 
   // UX Refinements: Lock & Search
   const [isLocked, setIsLocked] = useState(false);
@@ -293,7 +293,7 @@ export default function ControlRoom() {
     await logActivity('system', `Deleted team: ${teamName}`, teamName);
   };
 
-  const handleDraftChange = (teamId: string, field: keyof Team, value: number) => {
+  const handleDraftChange = (teamId: string, field: string, value: string | number) => {
     setDraftScores(prev => ({
       ...prev,
       [teamId]: { ...prev[teamId], [field]: value }
@@ -325,7 +325,7 @@ export default function ControlRoom() {
              delta = delta * mult;
              updates[key] = (Number(oldTeam[key]) || 0) + delta;
           } else {
-             updates[key] = draft[key];
+             updates[key] = Number(draft[key]);
           }
 
           totalDelta += delta;
@@ -347,6 +347,80 @@ export default function ControlRoom() {
         delete next[id];
         return next;
       });
+    }
+  };
+
+  const handleBulkRevealScores = async () => {
+    if (isLocked) return;
+    if (isFrozen(injections)) {
+       showToast("Score updates are FROZEN by a Global Phenomenon!", "info");
+       return;
+    }
+    
+    const mult = getActiveMultiplier(injections);
+    let totalDeltaGlobal = 0;
+    
+    const updatesPromises: Map<string, Partial<Team>> = new Map();
+    let teamsAffected = 0;
+
+    for (const team of teams) {
+      const draft = draftScores[team.id];
+      if (!draft) continue;
+      
+      const updates: Partial<Team> = {};
+      let totalDelta = 0;
+
+      (['review1', 'review2', 'review3', 'bonusPoints'] as const).forEach(key => {
+         if (draft[key] !== undefined && draft[key] !== team[key]) {
+            let delta = Number(draft[key]) - (Number(team[key]) || 0);
+            
+            if (mult !== 1) {
+               delta = delta * mult;
+               updates[key] = (Number(team[key]) || 0) + delta;
+            } else {
+               updates[key] = Number(draft[key]);
+            }
+            totalDelta += delta;
+         }
+      });
+      
+      if (Object.keys(updates).length > 0) {
+        updatesPromises.set(team.id, updates);
+        totalDeltaGlobal += totalDelta;
+        teamsAffected++;
+      }
+    }
+
+    if (teamsAffected === 0) {
+       showToast("No draft changes to reveal", "info");
+       return;
+    }
+
+    if (!confirm(`Casino Reveal: Update scores for ${teamsAffected} teams simultaneously?`)) return;
+
+    try {
+      // 1. Commit Global State flag for bulk reveal lock (Leaderboards will fetch this and animate immediately)
+      await setDoc(doc(db, 'globalState', 'bulkReveal'), {
+        isActive: true,
+        triggerTime: Date.now(),
+        durationMs: 4000
+      });
+
+      // 2. Clear local draft scores instantly
+      setDraftScores({});
+      
+      // 3. Batch the updates
+      const updateList = Array.from(updatesPromises.entries());
+      await Promise.all(
+        updateList.map(([id, payload]) => updateDoc(doc(db, 'teams', id), payload))
+      );
+
+      // 4. Activity Logs
+      await logActivity('system', `BULK REVEAL triggered for ${teamsAffected} teams. Total Points shifted: ${totalDeltaGlobal}`);
+      showToast(`Bulk Reveal triggered for ${teamsAffected} teams!`, "success");
+    } catch (e) {
+      console.error(e);
+      showToast("Error executing Bulk Reveal", "info");
     }
   };
 
@@ -615,6 +689,8 @@ export default function ControlRoom() {
 
   const filteredTeams = teams.filter(t => t.teamName.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  const teamsWithDraftsCount = teams.filter(team => draftScores[team.id] && (['review1', 'review2', 'review3', 'bonusPoints'] as const).some(k => draftScores[team.id]![k] !== undefined && draftScores[team.id]![k] !== team[k])).length;
+
   return (
     <main className="min-h-screen py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 lg:space-y-8 relative overflow-x-hidden w-full">
       
@@ -727,6 +803,24 @@ export default function ControlRoom() {
 
       {/* Team Listing & Control */}
       <section className={`glass-panel p-4 md:p-6 rounded-2xl border border-zinc-800 overflow-x-auto ${isLocked ? 'opacity-50 pointer-events-none filter grayscale-[30%]' : ''}`}>
+        
+        {/* Bulk Reveal Header Section */}
+        {teamsWithDraftsCount > 0 && (
+          <div className="mb-4 bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl flex items-center justify-between">
+             <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                <span className="text-yellow-400 font-bold uppercase tracking-widest text-xs">{teamsWithDraftsCount} team(s) have drafted scores</span>
+             </div>
+             <button 
+                onClick={handleBulkRevealScores}
+                disabled={isLocked}
+                className="bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest px-6 py-2 rounded-lg text-xs md:text-sm shadow-[0_0_15px_rgba(234,179,8,0.4)] transition-all animate-none hover:scale-105"
+             >
+                🎯 Reveal Drafted Scores
+             </button>
+          </div>
+        )}
+
         <div className="min-w-[1100px]">
           <div className="grid grid-cols-[minmax(150px,2fr)_repeat(4,1fr)_1.5fr_4fr_1fr] gap-4 pb-4 border-b border-zinc-800 text-xs font-bold uppercase tracking-wider text-zinc-400 px-2 justify-items-center">
              <div className="justify-self-start">Team Name</div>
@@ -750,7 +844,7 @@ export default function ControlRoom() {
                  const r2 = draftScores[team.id]?.review2 ?? (Number(team.review2) || 0);
                  const r3 = draftScores[team.id]?.review3 ?? (Number(team.review3) || 0);
                  const b = draftScores[team.id]?.bonusPoints ?? (Number(team.bonusPoints) || 0);
-                 const total = r1 + r2 + r3 + b;
+                 const total = Number(r1) + Number(r2) + Number(r3) + Number(b);
                  
                  const hasDraftChanges = draftScores[team.id] && (['review1', 'review2', 'review3', 'bonusPoints'] as const).some(k => draftScores[team.id]![k] !== undefined && draftScores[team.id]![k] !== team[k]);
 
@@ -770,16 +864,16 @@ export default function ControlRoom() {
                      
                      {/* Scores */}
                      <div>
-                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.review1 ?? team.review1} onChange={(e) => handleDraftChange(team.id, 'review1', Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.review1 !== undefined && draftScores[team.id]?.review1 !== team.review1 ? 'border-[#39ff14] text-[#39ff14]' : 'border-zinc-700 text-white'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono`} />
+                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.review1 ?? team.review1} onChange={(e) => handleDraftChange(team.id, 'review1', e.target.value === '' ? '' : Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.review1 !== undefined && draftScores[team.id]?.review1 !== team.review1 ? 'border-[#39ff14] text-[#39ff14]' : 'border-zinc-700 text-white'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono`} />
                      </div>
                      <div>
-                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.review2 ?? team.review2} onChange={(e) => handleDraftChange(team.id, 'review2', Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.review2 !== undefined && draftScores[team.id]?.review2 !== team.review2 ? 'border-[#39ff14] text-[#39ff14]' : 'border-zinc-700 text-white'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono`} />
+                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.review2 ?? team.review2} onChange={(e) => handleDraftChange(team.id, 'review2', e.target.value === '' ? '' : Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.review2 !== undefined && draftScores[team.id]?.review2 !== team.review2 ? 'border-[#39ff14] text-[#39ff14]' : 'border-zinc-700 text-white'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono`} />
                      </div>
                      <div>
-                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.review3 ?? team.review3} onChange={(e) => handleDraftChange(team.id, 'review3', Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.review3 !== undefined && draftScores[team.id]?.review3 !== team.review3 ? 'border-[#39ff14] text-[#39ff14]' : 'border-zinc-700 text-white'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono`} />
+                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.review3 ?? team.review3} onChange={(e) => handleDraftChange(team.id, 'review3', e.target.value === '' ? '' : Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.review3 !== undefined && draftScores[team.id]?.review3 !== team.review3 ? 'border-[#39ff14] text-[#39ff14]' : 'border-zinc-700 text-white'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono`} />
                      </div>
                      <div>
-                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.bonusPoints ?? team.bonusPoints} onChange={(e) => handleDraftChange(team.id, 'bonusPoints', Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.bonusPoints !== undefined && draftScores[team.id]?.bonusPoints !== team.bonusPoints ? 'border-[#39ff14] text-[#39ff14] shadow-[0_0_10px_rgba(57,255,20,0.3)]' : 'border-yellow-500/50 text-[#39ff14]'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono font-bold`} />
+                       <input type="number" disabled={isLocked} value={draftScores[team.id]?.bonusPoints ?? team.bonusPoints} onChange={(e) => handleDraftChange(team.id, 'bonusPoints', e.target.value === '' ? '' : Number(e.target.value))} className={`w-full bg-zinc-900 border ${draftScores[team.id]?.bonusPoints !== undefined && draftScores[team.id]?.bonusPoints !== team.bonusPoints ? 'border-[#39ff14] text-[#39ff14] shadow-[0_0_10px_rgba(57,255,20,0.3)]' : 'border-yellow-500/50 text-[#39ff14]'} text-center rounded py-2 focus:border-[#39ff14] focus:outline-none font-mono font-bold`} />
                      </div>
 
                      {/* Total Display */}

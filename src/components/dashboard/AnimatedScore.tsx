@@ -6,11 +6,26 @@ import { playScoreSound, playScoreDeductSound } from '@/lib/soundManager';
 interface AnimatedScoreProps {
   value: number;
   className?: string;
+  isRolling?: boolean;
 }
 
-export default function AnimatedScore({ value, className = '' }: AnimatedScoreProps) {
+export default function AnimatedScore({ value, className = '', isRolling = false }: AnimatedScoreProps) {
   const [displayValue, setDisplayValue] = useState(value);
   const isFirstRender = useRef(true);
+
+  // Rolling effect (Casino-style reveal)
+  useEffect(() => {
+    if (isRolling) {
+      const randomizeInterval = setInterval(() => {
+        // Random number between 0 and 9999
+        setDisplayValue(Math.floor(Math.random() * 9999));
+      }, 50); // fast flicker
+      
+      return () => clearInterval(randomizeInterval);
+    } else if (!isFirstRender.current) {
+        setDisplayValue(value); // Snap to final value when rolling finishes
+    }
+  }, [isRolling]);
 
   useEffect(() => {
     // Prevent animation on initial mount
@@ -20,7 +35,7 @@ export default function AnimatedScore({ value, className = '' }: AnimatedScorePr
        return;
     }
 
-    if (displayValue === value) return;
+    if (displayValue === value || isRolling) return;
     
     if (value < displayValue) {
        playScoreDeductSound();
@@ -57,5 +72,9 @@ export default function AnimatedScore({ value, className = '' }: AnimatedScorePr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  return <span className={className}>{displayValue}</span>;
+  return (
+    <span className={`${className} ${isRolling ? 'blur-[1px] opacity-80' : ''} transition-[filter] duration-300`}>
+      {displayValue}
+    </span>
+  );
 }
