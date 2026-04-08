@@ -1,9 +1,24 @@
-let audioEnabled = true;
 let lastPlayed = 0;
 let currentSoundPriority = 0;
 
+let audioCtx: AudioContext | null = null;
+const audioBuffers: Record<string, AudioBuffer> = {};
+
+const initAudioContext = () => {
+  if (!audioCtx && typeof window !== 'undefined') {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
+  }
+  return audioCtx;
+};
+
 export const enableAudio = () => {
-  audioEnabled = true;
+  const ctx = initAudioContext();
+  if (ctx && ctx.state === 'suspended') {
+    ctx.resume();
+  }
 };
 
 const AUDIO_FILES = [
@@ -27,19 +42,31 @@ const AUDIO_FILES = [
   "/sounds/card-activate.mp3"
 ];
 
-const audioCache: Record<string, HTMLAudioElement> = {};
-
 if (typeof window !== 'undefined') {
-  // Ultra-aggressive background preloading to eliminate 1st-play lag
-  AUDIO_FILES.forEach(src => {
-    const audio = new Audio(src);
-    audio.preload = 'auto';
-    audioCache[src] = audio;
+  // Pre-fetch all audio files as ArrayBuffers into memory for instant, network-free playback later
+  AUDIO_FILES.forEach(async (src) => {
+    try {
+      const response = await fetch(src, { cache: 'force-cache' });
+      if (!response.ok) return;
+      const arrayBuffer = await response.arrayBuffer();
+      // Decode using the shared context to avoid creating too many contexts
+      const ctx = initAudioContext();
+      if (!ctx) return;
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      audioBuffers[src] = audioBuffer;
+    } catch (err) {
+      console.warn(`Failed to preload ${src}:`, err);
+    }
   });
 }
 
 const playWithPriority = (src: string, volume = 0.5, priority = 1) => {
-  if (!audioEnabled || typeof window === 'undefined') return;
+  const ctx = initAudioContext();
+  if (!ctx || typeof window === 'undefined') return;
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
 
   const now = Date.now();
   if (priority === currentSoundPriority && now - lastPlayed < 200) return; // micro anti-spam for same priority
@@ -52,16 +79,19 @@ const playWithPriority = (src: string, volume = 0.5, priority = 1) => {
       if (currentSoundPriority === priority) currentSoundPriority = 0;
     }, 1500);
 
-    // Fast-clone from memory cache prevents network/parsing stutters
-    let audio: HTMLAudioElement;
-    if (audioCache[src]) {
-       audio = audioCache[src].cloneNode(true) as HTMLAudioElement;
-    } else {
-       audio = new Audio(src);
+    const buffer = audioBuffers[src];
+    if (buffer) {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = volume;
+      
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      source.start(0);
     }
-    
-    audio.volume = volume;
-    audio.play().catch(() => {});
   }
 };
 
