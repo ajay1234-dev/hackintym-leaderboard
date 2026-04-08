@@ -391,7 +391,7 @@ export default function Leaderboard() {
     if (timeSinceTrigger < countdownMs) {
       setRevealPhase('COUNTDOWN');
       setMutedForBulkReveal(true);
-      speakText("Systems locked. Processing final scores in three... two... one...", 300);
+      speakText("Systems locked. Processing final scores...", 300);
       
       timeouts.push(setTimeout(() => {
          setRevealPhase('ROLLING');

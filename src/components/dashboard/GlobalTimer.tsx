@@ -12,8 +12,8 @@ export default function GlobalTimer() {
   const [now, setNow] = useState(Date.now());
   const [hasEnded, setHasEnded] = useState(false);
   
-  // Track last played hour strictly to prevent duplicate triggers
-  const lastPlayedHour = useRef<number | null>(null);
+  // Track previous step to accurately detect crossed boundaries without exact-match failures
+  const prevRemainingSeconds = useRef<number | null>(null);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'globalState', 'timer'), (docSnap) => {
@@ -21,6 +21,7 @@ export default function GlobalTimer() {
         setEndTime(docSnap.data().endTime);
         setDuration(docSnap.data().duration || null);
         setHasEnded(false); // Reset tracking if timer is restarted
+        prevRemainingSeconds.current = null;
       } else {
         setEndTime(null);
         setDuration(null);
@@ -47,18 +48,24 @@ export default function GlobalTimer() {
        }
 
        if (remainingSeconds > 0 && !hasEnded) {
-          // Play alert EXACTLY on every 2-hour boundary (e.g. 30h, 28h, 26h remaining)
-          const isExactBoundary = remainingSeconds > 0 && ((remainingSeconds % 7200) === 0);
-          if (isExactBoundary && lastPlayedHour.current !== remainingSeconds) {
-             playHourPassedSound();
-             lastPlayedHour.current = remainingSeconds;
-          }
+          if (prevRemainingSeconds.current !== null) {
+              const prevHours = Math.ceil(prevRemainingSeconds.current / 3600);
+              const currHours = Math.ceil(remainingSeconds / 3600);
+              
+              // Play alert when an hour boundary is crossed (e.g. 2h 00m 01s -> 2h 00m 00s)
+              // This is immune to setInterval skipping exact seconds.
+              if (prevHours > currHours && remainingSeconds > 10) {
+                 playHourPassedSound();
+              }
 
-          // Tick sequence for final 10 seconds. Play exactly once on the threshold.
-          if (remainingSeconds === 10) {
-             playTickingSound();
+              // Tick sequence for final 10 seconds. Play exactly once when entering the threshold.
+              if (prevRemainingSeconds.current > 10 && remainingSeconds <= 10) {
+                 playTickingSound();
+              }
           }
        }
+       
+       prevRemainingSeconds.current = remainingSeconds;
     }, 1000);
     
     return () => clearInterval(interval);
