@@ -76,11 +76,13 @@ function LeaderboardRow({ team, index, totalRows, renderCard, revealPhase }: { t
   const isRollingRef = useRef(false);
 
   useEffect(() => {
-    if (revealPhase === 'COUNTDOWN' || revealPhase === 'ROLLING') {
+    if (revealPhase === 'ROLLING') {
       if (!isRollingRef.current) {
          setIsRolling(true);
          isRollingRef.current = true;
       }
+    } else if (revealPhase === 'COUNTDOWN') {
+       // Do nothing but wait silently so they can switch tabs
     } else if (revealPhase === 'WAVE_LOCKING') {
       if (isRollingRef.current) {
         const lockDelayMs = (totalRows - 1 - index) * 300;
@@ -88,7 +90,6 @@ function LeaderboardRow({ team, index, totalRows, renderCard, revealPhase }: { t
         const timeout = setTimeout(() => {
           setIsRolling(false);
           isRollingRef.current = false;
-          playLockThudSound();
         }, lockDelayMs + extraSilence);
         return () => clearTimeout(timeout);
       }
@@ -377,7 +378,7 @@ export default function Leaderboard() {
     if (!bulkRevealData?.isActive) return;
 
     const timeSinceTrigger = Date.now() - (bulkRevealData.triggerTime || 0);
-    const countdownMs = bulkRevealData.countdownMs || 3000;
+    const countdownMs = 1500; // Silent pause for operators to switch tabs
     const rollDurationMs = bulkRevealData.rollDurationMs || 4000;
     const staggerDelayMs = bulkRevealData.staggerDelayMs || 300;
     
@@ -387,40 +388,42 @@ export default function Leaderboard() {
 
     const timeouts: NodeJS.Timeout[] = [];
 
-    // Reset flow
+    // 1. Silent wait phase
     if (timeSinceTrigger < countdownMs) {
       setRevealPhase('COUNTDOWN');
       setMutedForBulkReveal(true);
-      speakText("Systems locked. Processing final scores...", 300);
       
       timeouts.push(setTimeout(() => {
          setRevealPhase('ROLLING');
          playBulkRevealSound();
       }, countdownMs - timeSinceTrigger));
     } 
-    
-    if (timeSinceTrigger < countdownMs + rollDurationMs) {
-      if (timeSinceTrigger >= countdownMs) {
-         setRevealPhase('ROLLING');
-         setMutedForBulkReveal(true);
+
+    if (timeSinceTrigger >= countdownMs && timeSinceTrigger < countdownMs + rollDurationMs) {
+      if (timeSinceTrigger < countdownMs + 100) {
+        // Just in case it mounts right on the boundary
+        playBulkRevealSound();
       }
+      setRevealPhase('ROLLING');
+      setMutedForBulkReveal(true);
       
       timeouts.push(setTimeout(() => {
          setRevealPhase('WAVE_LOCKING');
       }, countdownMs + rollDurationMs - timeSinceTrigger));
     }
 
-    if (timeSinceTrigger < countdownMs + rollDurationMs + totalWaveTime) {
-      if (timeSinceTrigger >= countdownMs + rollDurationMs) {
-         setRevealPhase('WAVE_LOCKING');
-         setMutedForBulkReveal(true);
-      }
+    if (timeSinceTrigger >= countdownMs + rollDurationMs && timeSinceTrigger < countdownMs + rollDurationMs + totalWaveTime) {
+      setRevealPhase('WAVE_LOCKING');
+      setMutedForBulkReveal(true);
 
       timeouts.push(setTimeout(() => {
          setRevealPhase('POST_REVEAL');
          playFinalImpactSound();
-         playCelebrationSound();
-         speakText("The leaderboard is updated.", 500);
+      }, countdownMs + rollDurationMs + totalWaveTime - timeSinceTrigger));
+    } else if (timeSinceTrigger < countdownMs + rollDurationMs) {
+      timeouts.push(setTimeout(() => {
+         setRevealPhase('POST_REVEAL');
+         playFinalImpactSound();
       }, countdownMs + rollDurationMs + totalWaveTime - timeSinceTrigger));
     }
 
@@ -485,16 +488,7 @@ export default function Leaderboard() {
 
       {/* Cinematic Phase Glow Overlays */}
       <AnimatePresence>
-         {revealPhase === 'COUNTDOWN' && (
-           <motion.div 
-             initial={{ opacity: 0 }} 
-             animate={{ opacity: 1 }} 
-             exit={{ opacity: 0 }}
-             className="absolute inset-0 bg-black/60 z-40 backdrop-blur-sm pointer-events-none flex items-center justify-center"
-           >
-              <CountdownOverlay />
-           </motion.div>
-         )}
+         {/* COUNTDOWN phase removed */}
       </AnimatePresence>
 
       <motion.div 
@@ -541,25 +535,3 @@ export default function Leaderboard() {
   );
 }
 
-// Sub-component for large screen countdown
-function CountdownOverlay() {
-  const [count, setCount] = useState(3);
-  useEffect(() => {
-    const t1 = setTimeout(() => setCount(2), 1000);
-    const t2 = setTimeout(() => setCount(1), 2000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
-
-  return (
-    <motion.div 
-       key={count}
-       initial={{ scale: 3, opacity: 0 }}
-       animate={{ scale: 1, opacity: 1 }}
-       exit={{ scale: 0.5, opacity: 0 }}
-       transition={{ type: 'spring', duration: 0.5 }}
-       className="text-[200px] font-black text-white drop-shadow-[0_0_50px_rgba(255,255,255,0.5)]"
-    >
-       {count}
-    </motion.div>
-  );
-}

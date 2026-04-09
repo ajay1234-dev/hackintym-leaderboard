@@ -12,20 +12,38 @@ interface AnimatedScoreProps {
 export default function AnimatedScore({ value, className = '', isRolling = false }: AnimatedScoreProps) {
   const [displayValue, setDisplayValue] = useState(value);
   const isFirstRender = useRef(true);
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const rollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Rolling effect (Casino-style reveal)
   useEffect(() => {
     if (isRolling) {
-      const randomizeInterval = setInterval(() => {
-        // Random number between 0 and 9999
-        setDisplayValue(Math.floor(Math.random() * 9999));
-      }, 50); // fast flicker
-      
-      return () => clearInterval(randomizeInterval);
-    } else if (!isFirstRender.current) {
-        setDisplayValue(value); // Snap to final value when rolling finishes
+      if (!rollingIntervalRef.current) {
+         // Direct DOM manipulation to avoid React re-render lag
+         rollingIntervalRef.current = setInterval(() => {
+            if (spanRef.current) {
+               spanRef.current.textContent = String(Math.floor(Math.random() * 9999));
+            }
+         }, 50); // fast flicker
+      }
+    } else {
+      if (rollingIntervalRef.current) {
+         clearInterval(rollingIntervalRef.current);
+         rollingIntervalRef.current = null;
+      }
+      if (!isFirstRender.current) {
+         setDisplayValue(value); // Snap to final value when rolling finishes
+         if (spanRef.current) spanRef.current.textContent = String(value);
+      }
     }
-  }, [isRolling]);
+
+    return () => {
+      if (rollingIntervalRef.current) {
+         clearInterval(rollingIntervalRef.current);
+         rollingIntervalRef.current = null;
+      }
+    };
+  }, [isRolling, value]);
 
   useEffect(() => {
     // Prevent animation on initial mount
@@ -56,15 +74,15 @@ export default function AnimatedScore({ value, className = '', isRolling = false
     // Ensure we step by at least 1
     if (stepAmount === 0) stepAmount = difference > 0 ? 1 : -1;
 
+    let current = startValue;
     const interval = setInterval(() => {
-      setDisplayValue(prev => {
-        if ((stepAmount > 0 && prev + stepAmount >= endValue) ||
-            (stepAmount < 0 && prev + stepAmount <= endValue)) {
-          clearInterval(interval);
-          return endValue;
-        }
-        return prev + stepAmount;
-      });
+      current += stepAmount;
+      if ((stepAmount > 0 && current >= endValue) || (stepAmount < 0 && current <= endValue)) {
+         current = endValue;
+         clearInterval(interval);
+      }
+      setDisplayValue(current);
+      if (spanRef.current) spanRef.current.textContent = String(current);
     }, tickIntervalMs);
 
     return () => clearInterval(interval);
@@ -73,7 +91,7 @@ export default function AnimatedScore({ value, className = '', isRolling = false
   }, [value]);
 
   return (
-    <span className={`${className} ${isRolling ? 'blur-[1px] opacity-80' : ''} transition-[filter] duration-300`}>
+    <span ref={spanRef} className={`${className} ${isRolling ? 'blur-[1px] opacity-80' : ''} transition-[filter] duration-300`}>
       {displayValue}
     </span>
   );

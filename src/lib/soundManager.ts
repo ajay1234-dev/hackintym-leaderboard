@@ -127,16 +127,6 @@ export const playLockThudSound = () => playWithPriority("/sounds/lock-thud.mp3",
 export const playFinalImpactSound = () => playWithPriority("/sounds/final-impact.mp3", 1.0, 6);
 
 export const speakText = (text: string, delayMs = 0) => {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  setTimeout(() => {
-    window.speechSynthesis.cancel(); // kill existing speech
-    const msg = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    // Prefer English digital/robotic voices
-    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Microsoft Mark') || v.name.includes('Zira')));
-    if (preferredVoice) msg.voice = preferredVoice;
-    msg.pitch = 0.85; // slightly deeper, authoritative
-    msg.rate = 1.05; // slightly faster
-    window.speechSynthesis.speak(msg);
-  }, delayMs);
+  // Completely disabled as per user request to destroy the robot voice
 };
+

@@ -406,6 +406,10 @@ export default function ControlRoom() {
         durationMs: 4000
       });
 
+      // WAIT 1 second to guarantee the Leaderboard clients process the lock flag and deeply MUTE all sounds!
+      // This totally fixes the network race condition where team rank updates arrived before the frontend muted itself.
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // 2. Clear local draft scores instantly
       setDraftScores({});
       
