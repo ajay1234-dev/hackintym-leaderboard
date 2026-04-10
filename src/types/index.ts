@@ -22,10 +22,16 @@ export interface ActivityLog {
 export interface Card {
   id: string;
   name: string;
-  type: 'COMMON' | 'RARE' | 'LEGENDARY';
+  rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
+  type: 'BOOST' | 'ATTACK' | 'DEFENSE' | 'UTILITY' | string;
   description: string;
-  effect: string;
+  effect: 'add_points' | 'multiply_score' | 'deduct_points' | 'block' | 'freeze' | 'extend_time' | string;
+  value: number | null;
+  durationType: 'INSTANT' | 'NEXT_ACTION' | 'TIMED' | string;
+  durationValue: number | null;
   icon: string;
+  color?: string;
+  createdAt?: number;
 }
 
 export interface Injection {

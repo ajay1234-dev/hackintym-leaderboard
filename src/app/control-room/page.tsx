@@ -27,8 +27,8 @@ export default function ControlRoom() {
 
   // Deck Builder State
   const [isAddingCard, setIsAddingCard] = useState(false);
-  const [newCard, setNewCard] = useState({
-    name: '', type: 'COMMON', description: '', effect: '', icon: 'Zap'
+  const [newCard, setNewCard] = useState<Partial<Card>>({
+    name: '', rarity: 'COMMON', type: 'BOOST', description: '', effect: 'add_points', value: null, durationType: 'INSTANT', durationValue: null, icon: 'Zap'
   });
 
   // Assign state mapped by team id
@@ -91,7 +91,8 @@ export default function ControlRoom() {
     const unsubscribeCards = onSnapshot(qCards, (snapshot) => {
       const cardsData = snapshot.docs.map(doc => {
          const data = doc.data();
-         return { id: doc.id, ...data, type: (data.type || 'COMMON').toUpperCase() } as Card;
+         const rarity = (data.rarity || (['COMMON','RARE','LEGENDARY'].includes(data.type) ? data.type : null) || 'COMMON').toUpperCase();
+         return { id: doc.id, ...data, rarity } as Card;
       });
       setCards(cardsData);
     });
@@ -437,15 +438,59 @@ export default function ControlRoom() {
   }
 
   // Card Logic
+  const getAutoDescription = (effect: string, value: number | null, durationType: string, durationValue: number | null) => {
+    let base = '';
+    if (effect === 'add_points') base = `+${value || 0} points instantly`;
+    else if (effect === 'deduct_points') base = `Deducts ${Math.abs(value || 0)} points`;
+    else if (effect === 'multiply_score') base = `Next score will be multiplied by ${value || 2}`;
+    else if (effect === 'block') base = 'Blocks next attack or penalty';
+    else if (effect === 'freeze') base = `Freeze opponent${durationType === 'TIMED' && durationValue ? ` for ${durationValue} seconds` : ''}`;
+    else if (effect === 'extend_time') base = `Extends time by ${value || 0} seconds`;
+    else base = effect;
+
+    if (durationType === 'TIMED' && durationValue && effect !== 'freeze' && effect !== 'extend_time') {
+      base += ` for ${durationValue} seconds`;
+    }
+    return base;
+  };
+
+  const getCardColor = (type: string) => {
+    switch (type) {
+      case 'BOOST': return 'green';
+      case 'ATTACK': return 'red';
+      case 'DEFENSE': return 'blue';
+      case 'UTILITY': return 'purple';
+      default: return 'zinc';
+    }
+  };
+
   const handleAddCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCard.name || !newCard.effect || !newCard.icon) return;
+    
+    // Validation
+    if (['add_points', 'deduct_points', 'multiply_score', 'extend_time'].includes(newCard.effect) && (newCard.value === null || newCard.value === undefined)) {
+       showToast('Value required for this effect', 'info');
+       return;
+    }
+    if (newCard.durationType === 'TIMED' && !newCard.durationValue) {
+       showToast('Duration required for TIMED effect', 'info');
+       return;
+    }
+
     setIsAddingCard(true);
     try {
-      await addDoc(collection(db, 'cards'), newCard);
+      const finalCard = {
+        ...newCard,
+        description: getAutoDescription(newCard.effect as string, newCard.value as number | null, newCard.durationType as string, newCard.durationValue as number | null),
+        color: getCardColor(newCard.type as string),
+        createdAt: Date.now()
+      };
+
+      await addDoc(collection(db, 'cards'), finalCard);
       await logActivity('system', `Created card: ${newCard.name}`);
       showToast(`Forged card: ${newCard.icon} ${newCard.name}`, 'success');
-      setNewCard({ name: '', type: 'COMMON', description: '', effect: '', icon: 'Zap' });
+      setNewCard({ name: '', rarity: 'COMMON', type: 'BOOST', description: '', effect: 'add_points', value: null, durationType: 'INSTANT', durationValue: null, icon: 'Zap' });
     } finally { setIsAddingCard(false); }
   };
 
@@ -893,9 +938,9 @@ export default function ControlRoom() {
                             const activeTab = activeCardTabs[team.id] || 'COMMON';
                             const setTab = (tab: string) => setActiveCardTabs(prev => ({...prev, [team.id]: tab}));
                             
-                            const common = cards.filter(c => c.type === 'COMMON');
-                            const rare = cards.filter(c => c.type === 'RARE');
-                            const leg = cards.filter(c => c.type === 'LEGENDARY');
+                            const common = cards.filter(c => c.rarity === 'COMMON');
+                            const rare = cards.filter(c => c.rarity === 'RARE');
+                            const leg = cards.filter(c => c.rarity === 'LEGENDARY');
 
                             const activeCards = activeTab === 'COMMON' ? common : activeTab === 'RARE' ? rare : leg;
 
@@ -1068,36 +1113,63 @@ export default function ControlRoom() {
           </h2>
           
           <form onSubmit={handleAddCard} className="space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <select value={newCard.icon} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-full sm:w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-center" required>
-                {Object.keys(CARD_ICONS).map(iconName => (
-                  <option key={iconName} value={iconName}>{iconName}</option>
-                ))}
-              </select>
-              <input type="text" placeholder="Card Name" value={newCard.name} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white" required />
-              <select 
-                value={newCard.type} 
-                onChange={e => {
-                  const newType = e.target.value as any;
-                  // Auto-switch icon based on category, user can override later
-                  let defaultIcon = newCard.icon;
-                  if (newType === 'COMMON') defaultIcon = 'Zap';
-                  if (newType === 'RARE') defaultIcon = 'Shield';
-                  if (newType === 'LEGENDARY') defaultIcon = 'Crown';
-                  
-                  setNewCard({...newCard, type: newType, icon: defaultIcon});
-                }} 
-                className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 font-bold uppercase tracking-widest text-xs"
-              >
-                <option value="COMMON" className="text-[#39ff14]">Common</option>
-                <option value="RARE" className="text-purple-400">Rare</option>
-                <option value="LEGENDARY" className="text-yellow-400">Legendary</option>
-              </select>
+            <div className="flex flex-wrap gap-3">
+              <input type="text" placeholder="Card Name" value={newCard.name || ''} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white font-bold" required />
+              
+              <div className="flex gap-2 flex-wrap sm:flex-nowrap flex-1 min-w-[280px]">
+                <select value={newCard.rarity || 'COMMON'} onChange={e => setNewCard({...newCard, rarity: e.target.value as any})} className="flex-1 min-w-[90px] bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 font-bold uppercase tracking-widest text-[10px]">
+                   <option value="COMMON" className="text-[#39ff14]">Common</option>
+                   <option value="RARE" className="text-purple-400">Rare</option>
+                   <option value="LEGENDARY" className="text-yellow-400">Legendary</option>
+                </select>
+
+                <select value={newCard.type || 'BOOST'} onChange={e => setNewCard({...newCard, type: e.target.value as any})} className="flex-1 min-w-[90px] bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 font-bold uppercase tracking-widest text-[10px]">
+                   <option value="BOOST" className="text-green-400">Boost</option>
+                   <option value="ATTACK" className="text-red-400">Attack</option>
+                   <option value="DEFENSE" className="text-blue-400">Defense</option>
+                   <option value="UTILITY" className="text-purple-400">Utility</option>
+                </select>
+
+                <select value={newCard.icon || 'Zap'} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-1 py-2 text-center text-xs" required>
+                   {Object.keys(CARD_ICONS).map(iconName => (
+                     <option key={iconName} value={iconName}>{iconName}</option>
+                   ))}
+                </select>
+              </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input type="text" placeholder="Description" value={newCard.description} onChange={e => setNewCard({...newCard, description: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white" />
-              <input type="text" placeholder="Effect (+50 Pts)" value={newCard.effect} onChange={e => setNewCard({...newCard, effect: e.target.value})} className="w-full sm:w-1/3 bg-zinc-900 border border-zinc-700 text-[#39ff14] font-mono rounded-lg px-3 py-2 uppercase placeholder:normal-case placeholder:text-zinc-600 tracking-wider" required />
-              <button type="submit" disabled={isAddingCard || !newCard.name || !newCard.effect || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-6 py-2 rounded-lg uppercase font-bold text-sm tracking-widest transition-colors disabled:opacity-50">Forge</button>
+            
+            <div className="flex flex-wrap gap-3">
+              <select value={newCard.effect || 'add_points'} onChange={e => setNewCard({...newCard, effect: e.target.value as any})} className="flex-1 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 uppercase tracking-widest text-[10px] font-bold text-white">
+                 <option value="add_points">Add Points</option>
+                 <option value="deduct_points">Deduct Pts</option>
+                 <option value="multiply_score">Mult Score</option>
+                 <option value="block">Block</option>
+                 <option value="freeze">Freeze</option>
+                 <option value="extend_time">Extend Time</option>
+              </select>
+
+              <input 
+                 type="number" 
+                 placeholder={newCard.effect === 'multiply_score' ? "Mult(2,3)" : "Value"} 
+                 value={newCard.value === null ? '' : newCard.value} 
+                 onChange={e => setNewCard({...newCard, value: e.target.value === '' ? null : Number(e.target.value)})} 
+                 className="w-20 sm:w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-white font-mono text-center text-sm" 
+                 disabled={['block', 'freeze'].includes(newCard.effect as string) && newCard.effect !== 'freeze'}
+              />
+
+              <div className="flex gap-2 flex-wrap sm:flex-nowrap flex-1 min-w-[200px]">
+                <select value={newCard.durationType || 'INSTANT'} onChange={e => setNewCard({...newCard, durationType: e.target.value as any})} className="flex-1 min-w-[100px] bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                   <option value="INSTANT">Instant</option>
+                   <option value="NEXT_ACTION">Nx Action</option>
+                   <option value="TIMED">Timed</option>
+                </select>
+
+                {newCard.durationType === 'TIMED' && (
+                   <input type="number" placeholder="Secs" value={newCard.durationValue === null ? '' : newCard.durationValue} onChange={e => setNewCard({...newCard, durationValue: e.target.value === '' ? null : Number(e.target.value)})} className="w-16 sm:w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-white font-mono text-center text-sm" required />
+                )}
+
+                <button type="submit" disabled={isAddingCard || !newCard.name || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-4 sm:px-6 py-2 rounded-lg uppercase font-bold text-xs tracking-widest transition-colors disabled:opacity-50">Forge</button>
+              </div>
             </div>
           </form>
 
@@ -1109,25 +1181,60 @@ export default function ControlRoom() {
                    let borderClass = 'border-[#39ff14]/30 shadow-[0_0_15px_rgba(57,255,20,0.05)]';
                    let glowClass = 'bg-[#39ff14]';
                    let textClass = 'text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/10';
-                   let cardGlowEffect = '';
                    
-                   if (newCard.type === 'RARE') {
-                      borderClass = 'border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10';
-                      glowClass = 'bg-purple-500';
-                      textClass = 'text-purple-400 border-purple-500/40 bg-purple-500/10';
-                   } else if (newCard.type === 'LEGENDARY') {
-                      borderClass = 'border-yellow-500/60 shadow-[0_0_25px_rgba(234,179,8,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-yellow-900/20';
-                      glowClass = 'bg-yellow-500';
-                      textClass = 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.4)]';
-                      cardGlowEffect = 'animate-[pulse_4s_ease-in-out_infinite_alternate]';
+                   const getDynamicStyles = (type: string, rarity: string) => {
+                      if (type === 'ATTACK') return {
+                         border: rarity === 'LEGENDARY' ? 'border-red-500/60 shadow-[0_0_25px_rgba(239,68,68,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-red-900/20 animate-[pulse_4s_ease-in-out_infinite_alternate]' : rarity === 'RARE' ? 'border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.1)] bg-gradient-to-br from-zinc-900 to-red-900/10' : 'border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.05)]',
+                         glow: 'bg-red-500',
+                         text: rarity === 'LEGENDARY' ? 'text-red-400 border-red-500/30 bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.4)]' : 'text-red-400 border-red-500/30 bg-red-500/10'
+                      };
+                      if (type === 'DEFENSE') return {
+                         border: rarity === 'LEGENDARY' ? 'border-blue-500/60 shadow-[0_0_25px_rgba(59,130,246,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-blue-900/20 animate-[pulse_4s_ease-in-out_infinite_alternate]' : rarity === 'RARE' ? 'border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.1)] bg-gradient-to-br from-zinc-900 to-blue-900/10' : 'border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.05)]',
+                         glow: 'bg-blue-500',
+                         text: rarity === 'LEGENDARY' ? 'text-blue-400 border-blue-500/30 bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'
+                      };
+                      if (type === 'UTILITY') return {
+                         border: rarity === 'LEGENDARY' ? 'border-purple-500/60 shadow-[0_0_25px_rgba(168,85,247,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-purple-900/20 animate-[pulse_4s_ease-in-out_infinite_alternate]' : rarity === 'RARE' ? 'border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10' : 'border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.05)]',
+                         glow: 'bg-purple-500',
+                         text: rarity === 'LEGENDARY' ? 'text-purple-400 border-purple-500/30 bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'text-purple-400 border-purple-500/30 bg-purple-500/10'
+                      };
+                      return {
+                         border: rarity === 'LEGENDARY' ? 'border-[#39ff14]/60 shadow-[0_0_25px_rgba(57,255,20,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-[#39ff14]/20 animate-[pulse_4s_ease-in-out_infinite_alternate]' : rarity === 'RARE' ? 'border-[#39ff14]/40 shadow-[0_0_15px_rgba(57,255,20,0.1)] bg-gradient-to-br from-zinc-900 to-[#39ff14]/10' : 'border-[#39ff14]/30 shadow-[0_0_15px_rgba(57,255,20,0.05)]',
+                         glow: 'bg-[#39ff14]',
+                         text: rarity === 'LEGENDARY' ? 'text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/10 shadow-[0_0_10px_rgba(57,255,20,0.4)]' : 'text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/10'
+                      };
                    }
+                   const styles = getDynamicStyles(newCard.type as string || 'BOOST', newCard.rarity as string || 'COMMON');
+                   borderClass = styles.border;
+                   glowClass = styles.glow;
+                   textClass = styles.text;
 
-                   const IconComp = CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] || CARD_ICONS.CircleSlash;
+                   const autoDesc = (() => {
+                       let base = '';
+                       const effect = newCard.effect;
+                       const value = newCard.value;
+                       const durType = newCard.durationType;
+                       const durVal = newCard.durationValue;
+                       if (effect === 'add_points') base = `+${value || 0} points instantly`;
+                       else if (effect === 'deduct_points') base = `Deducts ${Math.abs(value || 0)} points`;
+                       else if (effect === 'multiply_score') base = `Next score will be multiplied by ${value || 2}`;
+                       else if (effect === 'block') base = 'Blocks next attack or penalty';
+                       else if (effect === 'freeze') base = `Freeze opponent${durType === 'TIMED' && durVal ? ` for ${durVal} seconds` : ''}`;
+                       else if (effect === 'extend_time') base = `Extends time by ${value || 0} seconds`;
+                       else base = 'Configure effect...';
+
+                       if (durType === 'TIMED' && durVal && effect !== 'freeze' && effect !== 'extend_time') {
+                         base += ` for ${durVal} seconds`;
+                       }
+                       return base;
+                   })();
+
+                   const IconComp = CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] || CARD_ICONS.Zap;
 
                    return (
-                     <div className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass} ${cardGlowEffect}`}>
+                     <div className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass}`}>
                        <div className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-30 ${glowClass}`}></div>
-                       {newCard.type === 'LEGENDARY' && (
+                       {newCard.rarity === 'LEGENDARY' && (
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none z-20"></div>
                        )}
                        
@@ -1137,11 +1244,11 @@ export default function ControlRoom() {
                                <IconComp className="w-6 h-6 drop-shadow-[0_0_8px_currentColor]" />
                              </div>
                              <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded border shadow-sm ${textClass}`}>
-                               {newCard.type}
+                               {newCard.rarity}
                              </span>
                           </div>
-                          <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight">{newCard.name || 'Undefined'}</h3>
-                          <p className="text-xs text-zinc-400 mb-6 flex-1 font-medium">{newCard.description || 'Awaiting structural data...'}</p>
+                          <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight">{newCard.name || 'Undefined Card'}</h3>
+                          <p className="text-xs text-zinc-400 mb-6 flex-1 font-medium">{autoDesc}</p>
                           <div className="pt-3 border-t border-zinc-800">
                              <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Effect Sequence</div>
                              <div className={`text-xs font-mono font-black tracking-wider px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 ${textClass.split(' ')[0]}`}>

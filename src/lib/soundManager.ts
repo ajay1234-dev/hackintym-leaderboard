@@ -41,7 +41,7 @@ const AUDIO_FILES = [
   "/sounds/time-up.mp3",
   "/sounds/card-activate.mp3",
   "/sounds/casino-reveal.mp3",
-  "/sounds/lock-thud.mp3",
+  "/sounds/lock-thud1.mp3",
   "/sounds/final-impact.mp3"
 ];
 
@@ -70,37 +70,45 @@ if (typeof window !== 'undefined') {
 }
 
 const playWithPriority = (src: string, volume = 0.5, priority = 1) => {
-  const ctx = initAudioContext();
-  if (!ctx || typeof window === 'undefined') return;
-
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
-  }
+  if (typeof window === 'undefined') return;
 
   const now = Date.now();
-  if (priority === currentSoundPriority && now - lastPlayed < 200) return; // micro anti-spam for same priority
+  // Basic 50ms anti-spam for the exact same sound to prevent extremely loud clustering
+  if (lastPlayed === now) return; 
+  lastPlayed = now;
 
-  if (priority >= currentSoundPriority) {
-    currentSoundPriority = priority;
-    lastPlayed = now;
+  const playInstant = () => {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    audio.play().catch(() => {});
+  };
 
-    setTimeout(() => {
-      if (currentSoundPriority === priority) currentSoundPriority = 0;
-    }, 1500);
+  const ctx = initAudioContext();
+  if (!ctx) {
+    playInstant();
+    return;
+  }
 
+  const playBuffer = () => {
     const buffer = audioBuffers[src];
     if (buffer) {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      
       const gainNode = ctx.createGain();
       gainNode.gain.value = volume;
-      
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
-      
       source.start(0);
+    } else {
+      // Fallback if buffer hasn't finished fetching/decoding
+      playInstant();
     }
+  };
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(playBuffer).catch(() => playInstant());
+  } else {
+    playBuffer();
   }
 };
 
@@ -123,7 +131,7 @@ export const playHourPassedSound = () => playWithPriority("/sounds/hour-passed.m
 export const playTickingSound = () => playWithPriority("/sounds/ticking.mp3", 0.5, 1);
 export const playTimeUpSound = () => playWithPriority("/sounds/time-up.mp3", 0.8, 3);
 export const playBulkRevealSound = () => playWithPriority("/sounds/casino-reveal.mp3", 0.8, 5);
-export const playLockThudSound = () => playWithPriority("/sounds/lock-thud.mp3", 0.7, 4);
+export const playLockThudSound = () => playWithPriority("/sounds/lock-thud1.mp3", 0.7, 4);
 export const playFinalImpactSound = () => playWithPriority("/sounds/final-impact.mp3", 1.0, 6);
 
 export const speakText = (text: string, delayMs = 0) => {

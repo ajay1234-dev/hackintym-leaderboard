@@ -90,6 +90,7 @@ function LeaderboardRow({ team, index, totalRows, renderCard, revealPhase }: { t
         const timeout = setTimeout(() => {
           setIsRolling(false);
           isRollingRef.current = false;
+          playLockThudSound();
         }, lockDelayMs + extraSilence);
         return () => clearTimeout(timeout);
       }
@@ -378,7 +379,6 @@ export default function Leaderboard() {
     if (!bulkRevealData?.isActive) return;
 
     const timeSinceTrigger = Date.now() - (bulkRevealData.triggerTime || 0);
-    const countdownMs = 1500; // Silent pause for operators to switch tabs
     const rollDurationMs = bulkRevealData.rollDurationMs || 4000;
     const staggerDelayMs = bulkRevealData.staggerDelayMs || 300;
     
@@ -388,49 +388,38 @@ export default function Leaderboard() {
 
     const timeouts: NodeJS.Timeout[] = [];
 
-    // 1. Silent wait phase
-    if (timeSinceTrigger < countdownMs) {
-      setRevealPhase('COUNTDOWN');
-      setMutedForBulkReveal(true);
-      
-      timeouts.push(setTimeout(() => {
-         setRevealPhase('ROLLING');
+    // Jump straight into the rolling phase so that isRolling=true hides the raw score updates
+    if (timeSinceTrigger < rollDurationMs) {
+      if (timeSinceTrigger < 200) {
          playBulkRevealSound();
-      }, countdownMs - timeSinceTrigger));
-    } 
-
-    if (timeSinceTrigger >= countdownMs && timeSinceTrigger < countdownMs + rollDurationMs) {
-      if (timeSinceTrigger < countdownMs + 100) {
-        // Just in case it mounts right on the boundary
-        playBulkRevealSound();
       }
       setRevealPhase('ROLLING');
       setMutedForBulkReveal(true);
       
       timeouts.push(setTimeout(() => {
          setRevealPhase('WAVE_LOCKING');
-      }, countdownMs + rollDurationMs - timeSinceTrigger));
-    }
+      }, rollDurationMs - timeSinceTrigger));
+    } 
 
-    if (timeSinceTrigger >= countdownMs + rollDurationMs && timeSinceTrigger < countdownMs + rollDurationMs + totalWaveTime) {
+    if (timeSinceTrigger >= rollDurationMs && timeSinceTrigger < rollDurationMs + totalWaveTime) {
       setRevealPhase('WAVE_LOCKING');
       setMutedForBulkReveal(true);
 
       timeouts.push(setTimeout(() => {
          setRevealPhase('POST_REVEAL');
          playFinalImpactSound();
-      }, countdownMs + rollDurationMs + totalWaveTime - timeSinceTrigger));
-    } else if (timeSinceTrigger < countdownMs + rollDurationMs) {
+      }, rollDurationMs + totalWaveTime - timeSinceTrigger));
+    } else if (timeSinceTrigger < rollDurationMs) {
       timeouts.push(setTimeout(() => {
          setRevealPhase('POST_REVEAL');
          playFinalImpactSound();
-      }, countdownMs + rollDurationMs + totalWaveTime - timeSinceTrigger));
+      }, rollDurationMs + totalWaveTime - timeSinceTrigger));
     }
 
     timeouts.push(setTimeout(() => {
       setRevealPhase('IDLE');
       setMutedForBulkReveal(false);
-    }, countdownMs + rollDurationMs + totalWaveTime + 5000 - timeSinceTrigger));
+    }, rollDurationMs + totalWaveTime + 5000 - timeSinceTrigger));
 
     return () => timeouts.forEach(clearTimeout);
   }, [bulkRevealData?.triggerTime, teams.length]);
