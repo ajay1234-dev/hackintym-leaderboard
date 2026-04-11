@@ -28,7 +28,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
 
   useEffect(() => {
     if (isVisible && celebration?.card) {
-      if (celebration.card.type === 'LEGENDARY') playCelebrationSound();
+      if (celebration.card.rarity === 'LEGENDARY') playCelebrationSound();
       else playCardSound();
     }
   }, [isVisible, celebration]);
@@ -67,7 +67,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
     }
   };
 
-  const rarityStyles = getRarityStyles(card.type);
+  const rarityStyles = getRarityStyles(card.rarity);
   const IconComponent = CARD_ICONS[card.icon as keyof typeof CARD_ICONS] || CARD_ICONS.CircleSlash;
 
   // Animation intensity based on rarity
@@ -97,7 +97,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
     }
   };
 
-  const animationConfig = getAnimationIntensity(card.type);
+  const animationConfig = getAnimationIntensity(card.rarity);
 
   return (
     <AnimatePresence>
@@ -110,10 +110,10 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
            className="fixed top-2 sm:top-4 left-1/2 transform -translate-x-1/2 z-[9999] pointer-events-none px-2 sm:px-4"
         >
           {/* Background Glow Effect */}
-          <GlowEffect rarity={card.type} />
+          <GlowEffect rarity={card.rarity} />
           
           {/* Particle Burst */}
-          <ParticleBurst rarity={card.type} />
+          <ParticleBurst rarity={card.rarity} />
 
           {/* Main Popup Container */}
           <motion.div
@@ -181,7 +181,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
             >
               {/* Card Icon */}
               <motion.div
-                animate={card.type === 'LEGENDARY' ? {
+                animate={card.rarity === 'LEGENDARY' ? {
                   rotate: [0, 5, -5, 0],
                   scale: [1, 1.05, 1]
                 } : {}}
@@ -224,7 +224,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
               </div>
 
               {/* Shimmer effect for legendary cards */}
-              {card.type === 'LEGENDARY' && (
+              {card.rarity === 'LEGENDARY' && (
                 <motion.div
                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
                   animate={{ x: ['-100%', '100%'] }}
@@ -235,7 +235,7 @@ export function CardCelebrationPopup({ celebration, isVisible }: CardCelebration
             </motion.div>
 
             {/* Rarity-specific decorative elements */}
-            {card.type === 'LEGENDARY' && (
+            {card.rarity === 'LEGENDARY' && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: [0, 1, 0.5, 1] }}

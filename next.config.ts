@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Vercel optimization
-  trailingSlash: true,
   images: {
     unoptimized: true
   },

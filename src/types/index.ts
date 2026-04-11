@@ -1,3 +1,15 @@
+export interface ActiveEffect {
+  id: string;
+  effect: string;
+  type: string;
+  value: number | null;
+  expiresAt: number | null;
+  isPending: boolean;
+  icon: string;
+  sourceCardId?: string;
+  targetTeamId?: string;
+}
+
 export interface Team {
   id: string;
   teamName: string;
@@ -7,6 +19,8 @@ export interface Team {
   bonusPoints: number;
   cardsOwned?: string[];
   cardsUsed?: string[];
+  activeEffects?: ActiveEffect[];
+  cardCooldowns?: Record<string, number>;
 }
 
 export interface ActivityLog {
@@ -29,6 +43,7 @@ export interface Card {
   value: number | null;
   durationType: 'INSTANT' | 'NEXT_ACTION' | 'TIMED' | string;
   durationValue: number | null;
+  cooldown?: number;
   icon: string;
   color?: string;
   createdAt?: number;

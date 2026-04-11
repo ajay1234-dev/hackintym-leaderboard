@@ -22,10 +22,11 @@ export default function CardsLibrary() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const cardsData = snapshot.docs.map(doc => {
         const data = doc.data();
+        const rarity = (data.rarity || (['COMMON', 'RARE', 'LEGENDARY'].includes(data.type) ? data.type : null) || 'COMMON').toUpperCase();
         return {
            id: doc.id,
            ...data,
-           type: (data.type || 'COMMON').toUpperCase()
+           rarity
         } as Card;
       });
       
@@ -37,14 +38,14 @@ export default function CardsLibrary() {
   }, []);
 
   const filteredCards = useMemo(() => {
-    return cards.filter(c => c.type === activeTab);
+    return cards.filter(c => c.rarity === activeTab);
   }, [cards, activeTab]);
 
   const cardsCount = useMemo(() => {
     return {
-      COMMON: cards.filter(c => c.type === 'COMMON').length,
-      RARE: cards.filter(c => c.type === 'RARE').length,
-      LEGENDARY: cards.filter(c => c.type === 'LEGENDARY').length,
+      COMMON: cards.filter(c => c.rarity === 'COMMON').length,
+      RARE: cards.filter(c => c.rarity === 'RARE').length,
+      LEGENDARY: cards.filter(c => c.rarity === 'LEGENDARY').length,
     };
   }, [cards]);
 
@@ -115,23 +116,26 @@ export default function CardsLibrary() {
                )}
 
                {filteredCards.map((card, i) => {
-                 let borderClass = 'border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.05)] hover:border-cyan-500/80 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)]';
+                 let borderClass = 'border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.05)] hover:border-cyan-500/80 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] bg-gradient-to-br from-zinc-900 to-zinc-900';
                  let glowClass = 'bg-cyan-500';
                  let textClass = 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10';
                  let cardGlowEffect = '';
                  
-                 if (card.type === 'RARE') {
-                    borderClass = 'border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] hover:border-purple-500/80 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)] bg-gradient-to-br from-zinc-900 to-purple-900/10';
+                 if (card.rarity === 'RARE') {
+                    borderClass = 'border-purple-500/60 shadow-[0_0_20px_rgba(168,85,247,0.2)] hover:border-purple-400 hover:shadow-[0_0_40px_rgba(168,85,247,0.4)] bg-gradient-to-b from-zinc-900 via-purple-900/10 to-zinc-900';
                     glowClass = 'bg-purple-500';
-                    textClass = 'text-purple-400 border-purple-500/40 bg-purple-500/10 drop-shadow-[0_0_5px_currentColor]';
-                 } else if (card.type === 'LEGENDARY') {
-                    borderClass = 'border-yellow-500/60 shadow-[0_0_25px_rgba(234,179,8,0.15)] hover:border-yellow-400 hover:shadow-[0_0_40px_rgba(234,179,8,0.3)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-yellow-900/20';
-                    glowClass = 'bg-yellow-500';
-                    textClass = 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.4)] drop-shadow-[0_0_8px_currentColor]';
-                    cardGlowEffect = 'animate-[pulse_4s_ease-in-out_infinite_alternate]';
+                    textClass = 'text-purple-400 border-purple-500/60 bg-purple-500/10 shadow-[0_0_15px_rgba(168,85,247,0.3)] filter brightness-110';
+                 } else if (card.rarity === 'LEGENDARY') {
+                    borderClass = 'border-yellow-400 shadow-[0_0_30px_rgba(234,179,8,0.3)] hover:border-white hover:shadow-[0_0_50px_rgba(234,179,8,0.6)] bg-gradient-to-br from-zinc-900 via-yellow-900/20 to-amber-950/30 border-b-yellow-500 border-r-yellow-500 drop-shadow-lg scale-[1.01]';
+                    glowClass = 'bg-yellow-400';
+                    textClass = 'text-yellow-300 border-yellow-400 bg-yellow-400/20 shadow-[inset_0_0_15px_rgba(234,179,8,0.3),0_0_20px_rgba(234,179,8,0.6)] drop-shadow-[0_0_10px_rgba(255,255,255,0.7)] ring-1 ring-yellow-400/50';
+                    cardGlowEffect = 'animate-[pulse_3s_ease-in-out_infinite_alternate] z-10';
                  }
 
-                 const IconComponent = CARD_ICONS[card.icon as keyof typeof CARD_ICONS] || CARD_ICONS.CircleSlash;
+                 const hasLucideIcon = card.icon && card.icon in CARD_ICONS;
+                 const IconComponent = hasLucideIcon ? CARD_ICONS[card.icon as keyof typeof CARD_ICONS] : null;
+                 const isLegacyString = !hasLucideIcon && (card.icon || '').length > 2 && /^[a-zA-Z]+$/.test(card.icon || '');
+                 const renderEmoji = isLegacyString ? '✨' : (card.icon || '✨');
 
                  return (
                    <motion.div 
@@ -146,14 +150,18 @@ export default function CardsLibrary() {
                      <div className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-20 group-hover:opacity-60 transition-opacity duration-500 ${glowClass}`}></div>
                      
                      {/* Legendary Shimmer */}
-                     {card.type === 'LEGENDARY' && (
+                     {card.rarity === 'LEGENDARY' && (
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out z-20 pointer-events-none"></div>
                      )}
                      
                      <div className="flex flex-col h-full relative z-10 w-full overflow-hidden">
                         <div className="flex items-start justify-between mb-4 sm:mb-6 shrink-0">
-                           <div className={`text-3xl sm:text-4xl p-2.5 sm:p-3.5 rounded-2xl border bg-zinc-950 shadow-inner group-hover:scale-110 transition-transform shrink-0 ${textClass}`}>
-                             <IconComponent className="w-6 h-6 sm:w-8 sm:h-8 drop-shadow-[0_0_8px_currentColor]" />
+                           <div className={`w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-110 transition-transform duration-300 shrink-0 flex items-start justify-start ${textClass.split(' ')[0]}`}>
+                             {IconComponent ? (
+                               <IconComponent className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-[0_0_15px_currentColor]" />
+                             ) : (
+                               <span className="text-4xl sm:text-5xl leading-none inline-block drop-shadow-[0_0_15px_currentColor] transition-transform duration-300">{renderEmoji}</span>
+                             )}
                            </div>
                            <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded border shadow-sm shrink-0 whitespace-nowrap ${textClass}`}>
                              {card.type}

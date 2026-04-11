@@ -8,7 +8,7 @@ import { db, auth } from '@/lib/firebase';
 import { Team, Card, Injection, Bounty } from '@/types';
 import { syncSession } from '@/app/actions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, RefreshCw, Target, Timer } from 'lucide-react';
+import { Search, Lock, Unlock, X, Info, CheckCircle2, Play, Pause, Zap, Trash2, Activity, RefreshCw, Target, Timer, Undo } from 'lucide-react';
 import { CARD_ICONS } from '@/lib/icons';
 import { getActiveMultiplier, isFrozen, getActiveGlobalPhenomena } from '@/lib/effectEngine';
 import { playResolveSound } from '@/lib/soundManager';
@@ -18,6 +18,7 @@ export default function ControlRoom() {
   const [cards, setCards] = useState<Card[]>([]);
   const [injections, setInjections] = useState<Injection[]>([]);
   const [bounties, setBounties] = useState<Bounty[]>([]);
+  const [uiClock, setUiClock] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   
@@ -57,6 +58,9 @@ export default function ControlRoom() {
 
   // Manual Score State
   const [draftScores, setDraftScores] = useState<Record<string, Record<string, string | number>>>({});
+  
+  // Target Selection State
+  const [cardTargets, setCardTargets] = useState<Record<string, string>>({});
 
   // UX Refinements: Lock & Search
   const [isLocked, setIsLocked] = useState(false);
@@ -80,6 +84,9 @@ export default function ControlRoom() {
   };
 
   useEffect(() => {
+    setUiClock(Date.now());
+    const clockInterval = setInterval(() => setUiClock(Date.now()), 1000);
+
     const qTeams = query(collection(db, 'teams'));
     const unsubscribeTeams = onSnapshot(qTeams, (snapshot) => {
       const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Team[];
@@ -124,6 +131,7 @@ export default function ControlRoom() {
     });
 
     return () => { 
+      clearInterval(clockInterval);
       unsubscribeTeams(); unsubscribeCards(); unsubscribeAuth(); 
       unsubscribeBounties();
       unsubscribeGlobalTimer();
@@ -131,18 +139,71 @@ export default function ControlRoom() {
     };
   }, []);
 
+  const applyScoreToTeam = (team: Team, draft: Record<string, string | number>, mult: number) => {
+    let totalDelta = 0;
+    const updates: Partial<Team> = {};
+    const messageParts: string[] = [];
+
+    const activeFreeze = team.activeEffects?.find(e => e.effect === 'freeze' && (!e.expiresAt || e.expiresAt > Date.now()));
+    if (activeFreeze) {
+       messageParts.push("Blocked by Freeze!");
+       return { totalDelta: 0, updates: {}, messageParts };
+    }
+
+    const activeShield = team.activeEffects?.find(e => e.effect === 'block' && (!e.expiresAt || e.expiresAt > Date.now()));
+    const pendingMultiplier = team.activeEffects?.find(e => e.isPending && e.effect === 'multiply_score');
+    let teamMult = pendingMultiplier && pendingMultiplier.value ? pendingMultiplier.value : 1;
+    let finalMult = mult * teamMult;
+
+    let hasMultiplierUsed = false;
+
+    (['review1', 'review2', 'review3', 'bonusPoints'] as const).forEach(key => {
+       if (draft[key] !== undefined && draft[key] !== team[key]) {
+          let delta = Number(draft[key]) - (Number(team[key]) || 0);
+          let fieldName = key === 'bonusPoints' ? 'Bonus' : `R${key.replace('review', '')}`;
+          
+          if (delta < 0 && activeShield) {
+             delta = 0;
+             messageParts.push(`Penalty blocked by Shield (${fieldName})`);
+             updates[key] = Number(team[key]) || 0;
+          } else {
+             let activeMult = delta > 0 ? finalMult : mult;
+             if (activeMult !== 1 && delta > 0) {
+                delta = delta * activeMult;
+                if (teamMult > 1) hasMultiplierUsed = true;
+             }
+             updates[key] = (Number(team[key]) || 0) + delta;
+             totalDelta += delta;
+             messageParts.push(`${delta > 0 ? '+' : ''}${delta} ${fieldName}${activeMult !== 1 && delta > 0 ? ` (x${activeMult})` : ''}`);
+          }
+       }
+    });
+
+    if (hasMultiplierUsed && pendingMultiplier) {
+       updates.activeEffects = (team.activeEffects || []).filter(e => e.id !== pendingMultiplier.id);
+       if (pendingMultiplier.sourceCardId) {
+          (updates as any).cardsOwned = arrayRemove(pendingMultiplier.sourceCardId);
+          (updates as any).cardsUsed = arrayUnion(pendingMultiplier.sourceCardId);
+       }
+    }
+
+    // Removed isLockedForRound since rounds are deleted
+
+    return { totalDelta, updates, messageParts };
+  };
+
   // --- 🔥 LIVE EVENT ENGINE BACKGROUND LOOP ---
   useEffect(() => {
-    if (!globalEndTime) return;
-    
     const interval = setInterval(async () => {
        const currentTime = Date.now();
-       const remainingSeconds = Math.max(0, Math.floor((globalEndTime - currentTime) / 1000));
        
-       // Handle auto-trigger injections
-       const stagedInjections = injections.filter(inj => inj.status === 'staged' && !inj.isTriggered && inj.triggerAtRemainingTime !== undefined);
-       
-       for (const inj of stagedInjections) {
+       if (globalEndTime) {
+          const remainingSeconds = Math.max(0, Math.floor((globalEndTime - currentTime) / 1000));
+          
+          // Handle auto-trigger injections
+          const stagedInjections = injections.filter(inj => inj.status === 'staged' && !inj.isTriggered && inj.triggerAtRemainingTime !== undefined);
+          
+          for (const inj of stagedInjections) {
           if (remainingSeconds <= inj.triggerAtRemainingTime!) {
              try {
                 const updates: Partial<Injection> = {
@@ -158,13 +219,19 @@ export default function ControlRoom() {
                    if (inj.type === 'global') {
                       for (const team of teams) {
                          const currentScore = Number(team.bonusPoints) || 0;
-                         await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + inj.points! });
+                         const { updates } = applyScoreToTeam(team, { bonusPoints: currentScore + inj.points! }, 1);
+                         if (Object.keys(updates).length > 0) {
+                            await updateDoc(doc(db, 'teams', team.id), updates);
+                         }
                       }
                    } else if (inj.type === 'selective' && inj.targetTeamId) {
                       const targetTeam = teams.find(t => t.id === inj.targetTeamId);
                       if (targetTeam) {
                          const currentScore = Number(targetTeam.bonusPoints) || 0;
-                         await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + inj.points! });
+                         const { updates } = applyScoreToTeam(targetTeam, { bonusPoints: currentScore + inj.points! }, 1);
+                         if (Object.keys(updates).length > 0) {
+                            await updateDoc(doc(db, 'teams', targetTeam.id), updates);
+                         }
                       }
                    }
                 }
@@ -177,6 +244,39 @@ export default function ControlRoom() {
                 await updateDoc(doc(db, 'injections', inj.id), updates);
                 logActivity('injection', `Auto-Triggered Phenomenon: ${inj.title}`, 'SYSTEM');
              } catch (err) { console.error('Failed auto-trigger:', err); }
+          }
+       } // end for stagedInjections
+       } // end if globalEndTime
+
+       // Clean expired team effects
+       for (const team of teams) {
+          if (team.activeEffects && team.activeEffects.length > 0) {
+             const currentTimeMs = Date.now();
+             const validEffects = team.activeEffects.filter(e => !e.expiresAt || e.expiresAt > currentTimeMs);
+             const expiredEffects = team.activeEffects.filter(e => e.expiresAt && e.expiresAt <= currentTimeMs);
+
+             if (expiredEffects.length > 0) {
+                try {
+                   // Move source cards to used along with the cleaning
+                   const updates: any = { activeEffects: validEffects };
+                   
+                   for (const e of expiredEffects as any[]) {
+                      if (e.sourceCardId) {
+                         const sourceTid = e.sourceTeamId || team.id;
+                         if (sourceTid === team.id) {
+                            updates.cardsOwned = arrayRemove(e.sourceCardId);
+                            updates.cardsUsed = arrayUnion(e.sourceCardId);
+                         } else {
+                            await updateDoc(doc(db, 'teams', sourceTid), {
+                               cardsOwned: arrayRemove(e.sourceCardId),
+                               cardsUsed: arrayUnion(e.sourceCardId)
+                            });
+                         }
+                      }
+                   }
+                   await updateDoc(doc(db, 'teams', team.id), updates);
+                } catch (err) { console.error('Failed auto-clean team effects:', err); }
+             }
           }
        }
 
@@ -301,6 +401,8 @@ export default function ControlRoom() {
     }));
   };
 
+
+
   const handleApplyScore = async (id: string, teamName: string) => {
     if (isFrozen(injections)) {
        showToast("Score updates are FROZEN by a Global Phenomenon!", "info");
@@ -314,27 +416,7 @@ export default function ControlRoom() {
     const oldTeam = teams.find(t => t.id === id);
     if (!oldTeam) return;
 
-    let totalDelta = 0;
-    const updates: Partial<Team> = {};
-    const messageParts: string[] = [];
-
-    (['review1', 'review2', 'review3', 'bonusPoints'] as const).forEach(key => {
-       if (draft[key] !== undefined && draft[key] !== oldTeam[key]) {
-          let delta = Number(draft[key]) - (Number(oldTeam[key]) || 0);
-          
-          if (mult !== 1) {
-             delta = delta * mult;
-             updates[key] = (Number(oldTeam[key]) || 0) + delta;
-          } else {
-             updates[key] = Number(draft[key]);
-          }
-
-          totalDelta += delta;
-          
-          let fieldName = key === 'bonusPoints' ? 'Bonus' : `R${key.replace('review', '')}`;
-          messageParts.push(`${delta > 0 ? '+' : ''}${delta} ${fieldName}${mult !== 1 ? ` (x${mult})` : ''}`);
-       }
-    });
+    const { totalDelta, updates, messageParts } = applyScoreToTeam(oldTeam, draft, mult);
 
     if (Object.keys(updates).length > 0) {
       await updateDoc(doc(db, 'teams', id), updates);
@@ -368,22 +450,7 @@ export default function ControlRoom() {
       const draft = draftScores[team.id];
       if (!draft) continue;
       
-      const updates: Partial<Team> = {};
-      let totalDelta = 0;
-
-      (['review1', 'review2', 'review3', 'bonusPoints'] as const).forEach(key => {
-         if (draft[key] !== undefined && draft[key] !== team[key]) {
-            let delta = Number(draft[key]) - (Number(team[key]) || 0);
-            
-            if (mult !== 1) {
-               delta = delta * mult;
-               updates[key] = (Number(team[key]) || 0) + delta;
-            } else {
-               updates[key] = Number(draft[key]);
-            }
-            totalDelta += delta;
-         }
-      });
+      const { totalDelta, updates } = applyScoreToTeam(team, draft, mult);
       
       if (Object.keys(updates).length > 0) {
         updatesPromises.set(team.id, updates);
@@ -513,17 +580,141 @@ export default function ControlRoom() {
     showToast(`Card granted: ${cardInfo?.icon} ${cardInfo?.name} -> ${teamName}`, 'success');
   };
 
-  const handleUseCard = async (teamId: string, teamName: string, cardId: string) => {
+  const handleUseCard = async (teamId: string, teamName: string, cardId: string, index: number) => {
     if (isLocked) return;
     const cardInfo = cards.find(c => c.id === cardId);
-    if (!confirm(`Execute ${cardInfo?.name} for ${teamName}?`)) return;
+    if (!cardInfo) return;
     
-    await updateDoc(doc(db, 'teams', teamId), {
-      cardsOwned: arrayRemove(cardId),
-      cardsUsed: arrayUnion(cardId)
-    });
-    await logActivity('card', `Team ${teamName} used ${cardInfo?.name} card`, teamName);
-    showToast(`${teamName} executed ${cardInfo?.name}`, 'success');
+    let targetTeamId: string | undefined = undefined;
+    const requiresTarget = cardInfo.type === 'ATTACK' || cardInfo.effect === 'deduct_points' || cardInfo.effect === 'freeze';
+    
+    if (requiresTarget) {
+      targetTeamId = cardTargets[`${teamId}_${cardId}_${index}`];
+      if (!targetTeamId) {
+        showToast("Please select a target team first!", "info");
+        return;
+      }
+    }
+    
+    if (!confirm(`Execute ${cardInfo.name} for ${teamName}?`)) return;
+    
+    const team = teams.find(t => t.id === teamId);
+    if (!team) return;
+
+    if ((team.activeEffects?.length || 0) > 0) {
+       showToast("Only one active card allowed at a time", "error");
+       return;
+    }
+
+    if (team.cardCooldowns && team.cardCooldowns[cardId] && team.cardCooldowns[cardId] > Date.now()) {
+       showToast("Card is currently on cooldown!", "error");
+       return;
+    }
+
+    let executingTeamUpdates: any = {};
+    let targetTeamUpdates: any = null;
+    let targetTeamInstance = targetTeamId ? teams.find(t => t.id === targetTeamId) : null;
+    let usedInstantly = false;
+    
+    console.log("Applying card:", cardInfo);
+    if (targetTeamId) console.log("Target:", targetTeamId);
+
+    if (cardInfo.effect === 'add_points') {
+      if (cardInfo.durationType === 'INSTANT' && cardInfo.value) {
+         // Apply via draft internally
+         const draft = { bonusPoints: (Number(team.bonusPoints) || 0) + cardInfo.value };
+         const mult = getActiveMultiplier(injections);
+         const { totalDelta, updates, messageParts } = applyScoreToTeam(team, draft, mult);
+         executingTeamUpdates = { ...updates };
+         usedInstantly = true;
+         if (totalDelta !== 0) showToast(`Added points to ${teamName}: ${messageParts.join(', ')}`, 'success');
+      }
+    } else if (cardInfo.effect === 'deduct_points') {
+      if (cardInfo.value && targetTeamInstance) {
+         // Prevent manual subtraction multiplying natively via logic rules
+         const draft = { bonusPoints: (Number(targetTeamInstance.bonusPoints) || 0) - cardInfo.value };
+         const mult = 1;
+         const { totalDelta, updates, messageParts } = applyScoreToTeam(targetTeamInstance, draft, mult);
+         targetTeamUpdates = { ...updates };
+         usedInstantly = true;
+         if (!messageParts[0]?.includes('Blocked by Freeze') && !messageParts[0]?.includes('Penalty blocked by Shield')) {
+            showToast(`${targetTeamInstance.teamName} lost ${cardInfo.value} points`);
+         } else {
+            showToast(`Attack deflected from ${targetTeamInstance.teamName}: ${messageParts.join(', ')}`, 'info');
+         }
+      }
+    } else if (cardInfo.effect === 'extend_time') {
+       if (cardInfo.value && globalEndTime) {
+          try {
+              await setDoc(doc(db, 'globalState', 'timer'), {
+                 endTime: globalEndTime + cardInfo.value * 1000
+              }, { merge: true });
+              showToast(`Global Timer extended by ${cardInfo.value}s!`, 'success');
+          } catch (e) {
+              console.error(e);
+          }
+          usedInstantly = true;
+       }
+    } else {
+       // Multiplier, Block, Freeze
+       const isPending = cardInfo.effect === 'multiply_score' ? true : cardInfo.durationType === 'NEXT_ACTION';
+       const expiresAt = cardInfo.durationType === 'TIMED' && cardInfo.durationValue ? Date.now() + cardInfo.durationValue * 1000 : null;
+       
+       if (cardInfo.effect === 'multiply_score') {
+          // Check for existing multiplier
+          const hasExisting = team.activeEffects?.some(e => e.effect === 'multiply_score');
+          if (hasExisting) {
+             showToast("Multiplier already active", "error");
+             return;
+          }
+       }
+
+       const newEffect: any = {
+          id: Math.random().toString(36).substring(2, 9),
+          effect: cardInfo.effect,
+          type: cardInfo.type,
+          value: cardInfo.value ?? null,
+          expiresAt: expiresAt ?? null,
+          isPending,
+          icon: cardInfo.icon,
+          sourceCardId: cardId,
+           sourceTeamId: teamId
+       };
+
+       if (targetTeamId) newEffect.targetTeamId = targetTeamId;
+
+       if (cardInfo.effect === 'freeze' && targetTeamInstance) {
+           targetTeamUpdates = { activeEffects: arrayUnion(newEffect) };
+           usedInstantly = true; // The executing team used their card instantly, target gets the effect!
+       } else {
+           executingTeamUpdates.activeEffects = arrayUnion(newEffect);
+       }
+    }
+
+    if (cardInfo.cooldown && cardInfo.cooldown > 0) {
+        executingTeamUpdates[`cardCooldowns.${cardId}`] = Date.now() + (cardInfo.cooldown * 1000);
+    }
+
+    if (usedInstantly) {
+       executingTeamUpdates.cardsOwned = arrayRemove(cardId);
+       executingTeamUpdates.cardsUsed = arrayUnion(cardId);
+    }
+    
+    try {
+      await updateDoc(doc(db, 'teams', teamId), executingTeamUpdates);
+      if (targetTeamUpdates && targetTeamId) {
+          await updateDoc(doc(db, 'teams', targetTeamId), targetTeamUpdates);
+      }
+      await logActivity('card', `Team ${teamName} used ${cardInfo.name} card${targetTeamInstance ? ` on ${targetTeamInstance.teamName}` : ''}`, teamName);
+      if (cardInfo.effect === 'multiply_score') {
+         showToast(`${teamName} next score will be ${cardInfo.value}x`, 'success');
+      } else if (cardInfo.effect !== 'deduct_points') {
+         showToast(`${teamName} executed ${cardInfo.name}`, 'success');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Error executing card.", "info");
+    }
   };
 
   const resolveRewardCard = (team: Team, cardIdStr?: string) => {
@@ -638,13 +829,19 @@ export default function ControlRoom() {
             if (newInjection.type === 'global' && newInjection.points !== 0) {
                for (const team of teams) {
                  const currentScore = Number(team.bonusPoints) || 0;
-                 await updateDoc(doc(db, 'teams', team.id), { bonusPoints: currentScore + newInjection.points! });
+                 const { updates } = applyScoreToTeam(team, { bonusPoints: currentScore + newInjection.points! }, 1);
+                 if (Object.keys(updates).length > 0) {
+                    await updateDoc(doc(db, 'teams', team.id), updates);
+                 }
                }
             } else if (newInjection.type === 'selective' && newInjection.points !== 0) {
                const targetTeam = teams.find(t => t.id === newInjection.targetTeamId);
                if (targetTeam) {
                   const currentScore = Number(targetTeam.bonusPoints) || 0;
-                  await updateDoc(doc(db, 'teams', targetTeam.id), { bonusPoints: currentScore + newInjection.points! });
+                  const { updates } = applyScoreToTeam(targetTeam, { bonusPoints: currentScore + newInjection.points! }, 1);
+                  if (Object.keys(updates).length > 0) {
+                     await updateDoc(doc(db, 'teams', targetTeam.id), updates);
+                  }
                }
             }
          }
@@ -691,7 +888,8 @@ export default function ControlRoom() {
        let actionMsg = `Team ${team.teamName} completed bounty: ${completingBounty.title} (+${completingBounty.rewardPoints} pts`;
 
        if (completingBounty.rewardPoints !== 0) {
-          updates.bonusPoints = (Number(team.bonusPoints) || 0) + completingBounty.rewardPoints;
+          const { updates: scoreUpdates } = applyScoreToTeam(team, { bonusPoints: (Number(team.bonusPoints) || 0) + completingBounty.rewardPoints }, 1);
+          Object.assign(updates, scoreUpdates);
        }
 
        if (completingBounty.rewardCardId && completingBounty.rewardCardId !== 'none') {
@@ -772,15 +970,15 @@ export default function ControlRoom() {
         </AnimatePresence>
       </div>
 
-      <header className="glass-panel p-6 rounded-2xl border neon-border flex flex-col md:flex-row gap-4 md:items-center justify-between shadow-[0_0_30px_rgba(57,255,20,0.05)]">
-        <div>
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black uppercase tracking-tighter" style={{ color: '#39ff14', textShadow: '0 0 20px rgba(57, 255, 20, 0.4)' }}>
+      <header className="glass-panel p-6 rounded-2xl border neon-border flex flex-col xl:flex-row gap-4 xl:items-center justify-between shadow-[0_0_30px_rgba(57,255,20,0.05)]">
+        <div className="shrink-0">
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black uppercase tracking-tighter whitespace-nowrap leading-tight" style={{ color: '#39ff14', textShadow: '0 0 20px rgba(57, 255, 20, 0.4)' }}>
             Control Room
           </h1>
           <p className="text-zinc-400 text-[10px] sm:text-xs md:text-sm tracking-[0.2em] font-bold uppercase mt-1 truncate">Prime Directive Override</p>
         </div>
         
-        <div className="flex flex-col xl:flex-row w-full xl:w-auto gap-4 items-stretch xl:items-center">
+        <div className="flex flex-col lg:flex-row w-full xl:w-auto gap-4 items-stretch lg:items-center">
           {/* Action Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800 w-full sm:w-auto">
              <div className="relative w-full sm:w-auto">
@@ -793,14 +991,14 @@ export default function ControlRoom() {
                  className="w-full sm:w-48 bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg pl-9 pr-3 py-2 outline-none focus:border-[#39ff14]/50 transition-colors"
                />
              </div>
-             
+
              <button 
                onClick={() => setIsLocked(!isLocked)}
                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black uppercase tracking-wider transition-all border ${
                  isLocked 
                  ? 'bg-red-500/20 text-red-500 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse' 
                  : 'bg-zinc-800/50 text-zinc-400 border-transparent hover:text-white'
-               }`}
+               } shrink-0`}
              >
                {isLocked ? <Lock className="w-4 h-4 shrink-0" /> : <Unlock className="w-4 h-4 shrink-0" />}
                {isLocked ? 'Locked' : 'Lock'}
@@ -932,120 +1130,118 @@ export default function ControlRoom() {
 
                       {/* Card Actions */}
                       <div className="w-full border-l border-zinc-800 pl-4 space-y-2 flex flex-col justify-center">
-                        {/* Available Mini-Cards (Tabbed categorized) */}
+                        {/* Available Mini-Cards (Dropdown categorized) */}
                         <div className="flex flex-col gap-2 w-full pr-2">
                           {(() => {
-                            const activeTab = activeCardTabs[team.id] || 'COMMON';
-                            const setTab = (tab: string) => setActiveCardTabs(prev => ({...prev, [team.id]: tab}));
-                            
-                            const common = cards.filter(c => c.rarity === 'COMMON');
-                            const rare = cards.filter(c => c.rarity === 'RARE');
-                            const leg = cards.filter(c => c.rarity === 'LEGENDARY');
-
-                            const activeCards = activeTab === 'COMMON' ? common : activeTab === 'RARE' ? rare : leg;
-
-                            const renderTab = (tabName: string, label: string, colorClass: string, count: number) => {
-                              const isActive = activeTab === tabName;
-                              return (
-                                <button 
-                                  type="button" 
-                                  onClick={() => setTab(tabName)}
-                                  className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? `${colorClass} shadow-md scale-[1.03] border` : 'bg-zinc-900 border border-zinc-800 text-zinc-500 opacity-50 hover:opacity-100 hover:bg-zinc-800'}`}
-                                >
-                                  {label} ({count})
-                                </button>
-                              );
-                            };
-
-                            const renderCardBtn = (c: Card) => {
-                              const IconComp = CARD_ICONS[c.icon as keyof typeof CARD_ICONS] || CARD_ICONS.Zap;
-                              const isSelected = selectedCards[team.id] === c.id;
-                              
-                              // Rarity glow inside card
-                              let glow = 'shadow-[0_0_10px_rgba(59,130,246,0.5)] bg-blue-900/60 border-blue-500'; // Default selection
-                              let rarityBorder = activeTab === 'COMMON' ? 'hover:border-[#39ff14]/50' : activeTab === 'RARE' ? 'hover:border-purple-500/50' : 'hover:border-yellow-500/50';
-
-                              return (
-                                <div key={c.id} className="flex-shrink-0 flex flex-row items-center gap-1">
-                                  <motion.button 
-                                     whileHover={{ scale: 1.05 }}
-                                     whileTap={{ scale: 0.95 }}
-                                     onClick={() => setSelectedCards(prev => ({ ...prev, [team.id]: isSelected ? '' : c.id }))} 
-                                     disabled={isLocked}
-                                     className={`flex items-center gap-1.5 rounded px-2 py-1 transition-all border ${isSelected ? glow + ' text-white' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-400 ' + rarityBorder}`}
-                                     title={`Select ${c.name}`}
-                                  >
-                                    <IconComp className="w-4 h-4" />
-                                    <span className={`text-[10px] uppercase font-bold max-w-[80px] truncate ${isSelected ? 'text-white' : 'text-zinc-400'}`}>{c.name}</span>
-                                  </motion.button>
-                                  <AnimatePresence>
-                                    {isSelected && (
-                                      <motion.button
-                                         initial={{ opacity: 0, scale: 0.5, width: 0 }}
-                                         animate={{ opacity: 1, scale: 1, width: 'auto' }}
-                                         exit={{ opacity: 0, scale: 0.5, width: 0 }}
-                                         onClick={() => {
-                                           handleAssignCard(team.id, team.teamName, c.id);
-                                           setSelectedCards(prev => {
-                                             const next = {...prev};
-                                             delete next[team.id];
-                                             return next;
-                                           });
-                                         }}
-                                         className="bg-blue-500 hover:bg-blue-400 text-white text-[10px] uppercase tracking-widest font-black px-2 py-1 rounded shadow-[0_0_10px_rgba(59,130,246,0.8)] z-10"
-                                      >
-                                        GIVE
-                                      </motion.button>
-                                    )}
-                                  </AnimatePresence>
-                                </div>
-                              );
+                            const selected = selectedCards[team.id] || '';
+                            const groupedCards = {
+                              COMMON: cards.filter(c => c.rarity === 'COMMON'),
+                              RARE: cards.filter(c => c.rarity === 'RARE'),
+                              LEGENDARY: cards.filter(c => c.rarity === 'LEGENDARY'),
                             };
 
                             return (
-                              <>
-                                {/* Tabs Row */}
-                                <div className="flex gap-2">
-                                  {renderTab('COMMON', 'Common', 'bg-[#39ff14]/10 border-[#39ff14] text-[#39ff14] shadow-[0_0_10px_rgba(57,255,20,0.2)]', common.length)}
-                                  {renderTab('RARE', 'Rare', 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]', rare.length)}
-                                  {renderTab('LEGENDARY', 'Legendary', 'bg-yellow-500/10 border-yellow-500 text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.2)]', leg.length)}
-                                </div>
-
-                                {/* Active Cards Grid */}
-                                <div className="relative overflow-x-auto pb-1 mt-1 scrollbar-thin scrollbar-thumb-zinc-700 min-h-[36px]">
-                                  <AnimatePresence mode="popLayout">
-                                    <motion.div 
-                                       key={activeTab}
-                                       initial={{ opacity: 0, y: 10 }}
-                                       animate={{ opacity: 1, y: 0 }}
-                                       exit={{ opacity: 0, y: -10 }}
-                                       transition={{ duration: 0.2 }}
-                                       className="flex gap-2 w-max"
+                              <div className="flex items-center gap-2">
+                                <select 
+                                  value={selected} 
+                                  onChange={(e) => setSelectedCards(prev => ({ ...prev, [team.id]: e.target.value }))}
+                                  disabled={isLocked}
+                                  className="flex-1 bg-zinc-900 border border-zinc-700 text-white rounded-lg px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest focus:border-blue-500 outline-none"
+                                >
+                                  <option value="">Select card to grant...</option>
+                                  {groupedCards.COMMON.length > 0 && (
+                                    <optgroup label={`COMMON (${groupedCards.COMMON.length})`} className="text-[#39ff14]">
+                                      {groupedCards.COMMON.map(c => <option key={c.id} value={c.id} className="text-white">{c.name}</option>)}
+                                    </optgroup>
+                                  )}
+                                  {groupedCards.RARE.length > 0 && (
+                                    <optgroup label={`RARE (${groupedCards.RARE.length})`} className="text-purple-400">
+                                      {groupedCards.RARE.map(c => <option key={c.id} value={c.id} className="text-white">{c.name}</option>)}
+                                    </optgroup>
+                                  )}
+                                  {groupedCards.LEGENDARY.length > 0 && (
+                                    <optgroup label={`LEGENDARY (${groupedCards.LEGENDARY.length})`} className="text-yellow-400">
+                                      {groupedCards.LEGENDARY.map(c => <option key={c.id} value={c.id} className="text-white">{c.name}</option>)}
+                                    </optgroup>
+                                  )}
+                                </select>
+                                
+                                <AnimatePresence>
+                                  {selected && (
+                                    <motion.button
+                                      initial={{ opacity: 0, scale: 0.8 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      exit={{ opacity: 0, scale: 0.8 }}
+                                      onClick={() => {
+                                        handleAssignCard(team.id, team.teamName, selected);
+                                        setSelectedCards(prev => {
+                                          const next = {...prev};
+                                          delete next[team.id];
+                                          return next;
+                                        });
+                                      }}
+                                      disabled={isLocked}
+                                      className="bg-blue-500 hover:bg-blue-400 text-white text-[10px] uppercase tracking-widest font-black px-3 py-1.5 rounded shadow-[0_0_10px_rgba(59,130,246,0.5)] transition-all shrink-0 z-10"
                                     >
-                                       {activeCards.length === 0 ? (
-                                          <span className="text-[10px] text-zinc-500 italic py-1">No cards available in this category</span>
-                                       ) : (
-                                          activeCards.map(renderCardBtn)
-                                       )}
-                                    </motion.div>
-                                  </AnimatePresence>
-                                </div>
-                              </>
+                                      GIVE
+                                    </motion.button>
+                                  )}
+                                </AnimatePresence>
+                              </div>
                             );
                           })()}
                         </div>
                        
                        {/* Owned Cards (Click to Execute) */}
-                       <div className="flex flex-wrap gap-1.5 mt-1 border-t border-zinc-800/50 pt-1">
+                       <div className="flex flex-col gap-1.5 mt-1 border-t border-zinc-800/50 pt-1">
                          {(team.cardsOwned || []).length === 0 && <span className="text-[10px] text-zinc-600 italic">Holding zero cards</span>}
                          {(team.cardsOwned || []).map((cardId, i) => {
                            const c = cards.find(ca => ca.id === cardId);
                            if(!c) return null;
+                           const isAttack = c.type === 'ATTACK' || c.effect === 'deduct_points' || c.effect === 'freeze';
+                           const targetKey = `${team.id}_${cardId}_${i}`;
+
+                           const cooldownTimestamp = team.cardCooldowns?.[cardId] || 0;
+                           const isCoolingDown = cooldownTimestamp > uiClock;
+                           const remainingCD = isCoolingDown ? Math.ceil((cooldownTimestamp - uiClock) / 1000) : 0;
+                           const minutes = Math.floor(remainingCD / 60);
+                           const seconds = remainingCD % 60;
+                           const formattedCD = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                           
+                           const isMaxEffects = (team.activeEffects?.length || 0) > 0;
+                           
+                           const isDisabled = isLocked || isCoolingDown || isMaxEffects;
+
                            return (
-                             <button key={`${cardId}-${i}`} disabled={isLocked} onClick={() => handleUseCard(team.id, team.teamName, cardId)} className="flex items-center gap-1 bg-zinc-800 border border-zinc-600 hover:border-red-500 hover:bg-red-500/20 px-2 py-0.5 rounded text-[10px] text-white group transition-colors">
-                               {c.icon} <span className="group-hover:hidden">{c.name}</span>
-                               <span className="hidden group-hover:inline text-red-400 font-bold tracking-widest">EXECUTE</span>
-                             </button>
+                             <div key={`${cardId}-${i}`} className="flex items-center gap-1">
+                               {isAttack && (
+                                 <select
+                                   value={cardTargets[targetKey] || ''}
+                                   onChange={e => setCardTargets(prev => ({...prev, [targetKey]: e.target.value}))}
+                                   className="text-[10px] bg-red-500/10 border border-red-500/30 text-red-300 rounded px-1 py-0.5 max-w-[100px] outline-none"
+                                   disabled={isDisabled}
+                                 >
+                                    <option value="" disabled>Target...</option>
+                                    {teams.filter(t => t.id !== team.id).map(t => (
+                                       <option key={t.id} value={t.id}>{t.teamName}</option>
+                                    ))}
+                                 </select>
+                               )}
+                               <button 
+                                 disabled={isDisabled} 
+                                 onClick={() => handleUseCard(team.id, team.teamName, cardId, i)} 
+                                 className={`flex items-center gap-1 bg-zinc-800 border ${isDisabled ? 'border-zinc-700 opacity-60 cursor-not-allowed' : 'border-zinc-600 hover:border-red-500 hover:bg-red-500/20'} px-2 py-0.5 rounded text-[10px] text-white flex-1 transition-colors`}
+                               >
+                                 {c.icon} <span className="truncate max-w-[80px]">{c.name}</span>
+                                 {isCoolingDown ? (
+                                   <span className="ml-auto text-cyan-400 font-bold tracking-widest text-[9px] uppercase">⏳ {formattedCD}</span>
+                                 ) : isMaxEffects ? (
+                                   <span className="ml-auto text-orange-400 font-bold tracking-widest text-[9px] uppercase">MAX EFFECTS</span>
+                                 ) : (
+                                   <span className="ml-auto text-red-400 font-bold tracking-widest text-[9px] uppercase">EXECUTE</span>
+                                 )}
+                               </button>
+                             </div>
                            );
                          })}
                        </div>
@@ -1116,7 +1312,7 @@ export default function ControlRoom() {
             <div className="flex flex-wrap gap-3">
               <input type="text" placeholder="Card Name" value={newCard.name || ''} onChange={e => setNewCard({...newCard, name: e.target.value})} className="flex-1 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white font-bold" required />
               
-              <div className="flex gap-2 flex-wrap sm:flex-nowrap flex-1 min-w-[280px]">
+              <div className="flex gap-2 flex-wrap flex-1 min-w-[280px]">
                 <select value={newCard.rarity || 'COMMON'} onChange={e => setNewCard({...newCard, rarity: e.target.value as any})} className="flex-1 min-w-[90px] bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 font-bold uppercase tracking-widest text-[10px]">
                    <option value="COMMON" className="text-[#39ff14]">Common</option>
                    <option value="RARE" className="text-purple-400">Rare</option>
@@ -1130,9 +1326,14 @@ export default function ControlRoom() {
                    <option value="UTILITY" className="text-purple-400">Utility</option>
                 </select>
 
-                <select value={newCard.icon || 'Zap'} onChange={e => setNewCard({...newCard, icon: e.target.value})} className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-1 py-2 text-center text-xs" required>
-                   {Object.keys(CARD_ICONS).map(iconName => (
-                     <option key={iconName} value={iconName}>{iconName}</option>
+                <select 
+                   value={newCard.icon || '🔥'} 
+                   onChange={e => setNewCard({...newCard, icon: e.target.value})} 
+                   className="w-16 bg-zinc-900 border border-zinc-700 rounded-xl px-1 py-2 text-center text-lg shadow-inner focus:outline-none focus:border-[#39ff14]" 
+                   required 
+                >
+                   {['🔥', '⚡', '🚀', '🧠', '👑', '⏱️', '🎯', '⭐', '🛡️', '❄️', '🗡️', '💻', '💡', '✨', '💀', '☢️', '🔮', '🎲', '🧬'].map(emoji => (
+                     <option key={emoji} value={emoji}>{emoji}</option>
                    ))}
                 </select>
               </div>
@@ -1157,7 +1358,7 @@ export default function ControlRoom() {
                  disabled={['block', 'freeze'].includes(newCard.effect as string) && newCard.effect !== 'freeze'}
               />
 
-              <div className="flex gap-2 flex-wrap sm:flex-nowrap flex-1 min-w-[200px]">
+              <div className="flex gap-2 flex-wrap flex-1 min-w-[200px]">
                 <select value={newCard.durationType || 'INSTANT'} onChange={e => setNewCard({...newCard, durationType: e.target.value as any})} className="flex-1 min-w-[100px] bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
                    <option value="INSTANT">Instant</option>
                    <option value="NEXT_ACTION">Nx Action</option>
@@ -1167,6 +1368,8 @@ export default function ControlRoom() {
                 {newCard.durationType === 'TIMED' && (
                    <input type="number" placeholder="Secs" value={newCard.durationValue === null ? '' : newCard.durationValue} onChange={e => setNewCard({...newCard, durationValue: e.target.value === '' ? null : Number(e.target.value)})} className="w-16 sm:w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-white font-mono text-center text-sm" required />
                 )}
+
+                <input type="number" placeholder="CD (secs)" value={newCard.cooldown === null || newCard.cooldown === undefined ? '' : newCard.cooldown} onChange={e => setNewCard({...newCard, cooldown: e.target.value === '' ? 0 : Number(e.target.value)})} className="w-20 sm:w-24 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-white font-mono text-center text-sm" />
 
                 <button type="submit" disabled={isAddingCard || !newCard.name || isLocked} className="bg-blue-500/20 text-blue-400 border border-blue-500/50 hover:bg-blue-500/40 px-4 sm:px-6 py-2 rounded-lg uppercase font-bold text-xs tracking-widest transition-colors disabled:opacity-50">Forge</button>
               </div>
@@ -1229,7 +1432,8 @@ export default function ControlRoom() {
                        return base;
                    })();
 
-                   const IconComp = CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] || CARD_ICONS.Zap;
+                   const hasLucideIcon = newCard.icon && newCard.icon in CARD_ICONS;
+                   const IconComp = hasLucideIcon ? CARD_ICONS[newCard.icon as keyof typeof CARD_ICONS] : null;
 
                    return (
                      <div className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass}`}>
@@ -1240,11 +1444,15 @@ export default function ControlRoom() {
                        
                        <div className="flex flex-col h-full relative z-10 min-h-[160px]">
                           <div className="flex items-start justify-between mb-4">
-                             <div className={`text-3xl p-3 rounded-2xl border bg-zinc-950 shadow-inner ${textClass}`}>
-                               <IconComp className="w-6 h-6 drop-shadow-[0_0_8px_currentColor]" />
+                             <div className={`w-12 h-12 flex items-start justify-start relative ${textClass.split(' ')[0]}`}>
+                                {IconComp ? (
+                                  <IconComp className="w-10 h-10 drop-shadow-[0_0_15px_currentColor]" />
+                                ) : (
+                                  <span className="text-4xl leading-none inline-block drop-shadow-[0_0_15px_currentColor] scale-110">{newCard.icon || '✨'}</span>
+                                )}
                              </div>
                              <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded border shadow-sm ${textClass}`}>
-                               {newCard.rarity}
+                               {newCard.type}
                              </span>
                           </div>
                           <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight">{newCard.name || 'Undefined Card'}</h3>
