@@ -580,6 +580,15 @@ export default function ControlRoom() {
     showToast(`Card granted: ${cardInfo?.icon} ${cardInfo?.name} -> ${teamName}`, 'success');
   };
 
+  const handleRevokeGhostCard = async (teamId: string, teamName: string, cardId: string) => {
+    if (isLocked) return;
+    if (!confirm(`Revoke completely broken/ghost card string ID: ${cardId} from ${teamName}?`)) return;
+    await updateDoc(doc(db, 'teams', teamId), {
+      cardsOwned: arrayRemove(cardId)
+    });
+    showToast(`Removed corrupted ghost ID from ${teamName}.`, 'info');
+  };
+
   const handleUseCard = async (teamId: string, teamName: string, cardId: string, index: number) => {
     if (isLocked) return;
     const cardInfo = cards.find(c => c.id === cardId);
@@ -601,13 +610,8 @@ export default function ControlRoom() {
     const team = teams.find(t => t.id === teamId);
     if (!team) return;
 
-    if ((team.activeEffects?.length || 0) > 0) {
-       showToast("Only one active card allowed at a time", "error");
-       return;
-    }
-
     if (team.cardCooldowns && team.cardCooldowns[cardId] && team.cardCooldowns[cardId] > Date.now()) {
-       showToast("Card is currently on cooldown!", "error");
+       showToast("Card is currently on cooldown!", "info");
        return;
     }
 
@@ -658,13 +662,16 @@ export default function ControlRoom() {
     } else {
        // Multiplier, Block, Freeze
        const isPending = cardInfo.effect === 'multiply_score' ? true : cardInfo.durationType === 'NEXT_ACTION';
-       const expiresAt = cardInfo.durationType === 'TIMED' && cardInfo.durationValue ? Date.now() + cardInfo.durationValue * 1000 : null;
+       // Fixed fallback duration logic for Freeze:
+       const actualDuration = cardInfo.durationValue || cardInfo.cooldown;
+       const autoTimed = cardInfo.durationType === 'TIMED' ? true : (cardInfo.effect === 'freeze' && actualDuration ? true : false);
+       const expiresAt = autoTimed && actualDuration ? Date.now() + actualDuration * 1000 : null;
        
        if (cardInfo.effect === 'multiply_score') {
           // Check for existing multiplier
           const hasExisting = team.activeEffects?.some(e => e.effect === 'multiply_score');
           if (hasExisting) {
-             showToast("Multiplier already active", "error");
+             showToast("Multiplier already active", "info");
              return;
           }
        }
@@ -1208,9 +1215,7 @@ export default function ControlRoom() {
                            const seconds = remainingCD % 60;
                            const formattedCD = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                            
-                           const isMaxEffects = (team.activeEffects?.length || 0) > 0;
-                           
-                           const isDisabled = isLocked || isCoolingDown || isMaxEffects;
+                           const isDisabled = isLocked || isCoolingDown;
 
                            return (
                              <div key={`${cardId}-${i}`} className="flex items-center gap-1">
@@ -1234,10 +1239,7 @@ export default function ControlRoom() {
                                >
                                  {c.icon} <span className="truncate max-w-[80px]">{c.name}</span>
                                  {isCoolingDown ? (
-                                   <span className="ml-auto text-cyan-400 font-bold tracking-widest text-[9px] uppercase">⏳ {formattedCD}</span>
-                                 ) : isMaxEffects ? (
-                                   <span className="ml-auto text-orange-400 font-bold tracking-widest text-[9px] uppercase">MAX EFFECTS</span>
-                                 ) : (
+                                   <span className="ml-auto text-cyan-400 font-bold tracking-widest text-[9px] uppercase">⏳ {formattedCD}</span>                  ) : (
                                    <span className="ml-auto text-red-400 font-bold tracking-widest text-[9px] uppercase">EXECUTE</span>
                                  )}
                                </button>
@@ -1446,8 +1448,7 @@ export default function ControlRoom() {
                           <div className="flex items-start justify-between mb-4">
                              <div className={`w-12 h-12 flex items-start justify-start relative ${textClass.split(' ')[0]}`}>
                                 {IconComp ? (
-                                  <IconComp className="w-10 h-10 drop-shadow-[0_0_15px_currentColor]" />
-                                ) : (
+                                   <IconComp className="w-10 h-10 drop-shadow-[0_0_15px_currentColor]" />) : (
                                   <span className="text-4xl leading-none inline-block drop-shadow-[0_0_15px_currentColor] scale-110">{newCard.icon || '✨'}</span>
                                 )}
                              </div>
@@ -1467,6 +1468,33 @@ export default function ControlRoom() {
                      </div>
                    );
                 })()}
+             </div>
+          </div>
+
+          {/* Card Vault */}
+          <div className="mt-4 pt-4 border-t border-zinc-800">
+             <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-500 mb-3 flex justify-between">
+                <span>Card Vault</span>
+                <span className="text-zinc-600">{cards.length} Cards</span>
+             </div>
+             <div className="max-h-[220px] overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-700">
+               {cards.map(c => (
+                 <div key={c.id} className="flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-800/80 px-3 py-2 rounded-lg border border-zinc-800/60 transition-colors">
+                   <div className="flex gap-3 items-center truncate">
+                     <span className="text-xl shrink-0">{c.icon || '✨'}</span>
+                     <div className="flex flex-col truncate">
+                       <span className="text-xs text-white font-bold truncate">{c.name}</span>
+                       <span className={`text-[9px] uppercase font-black tracking-widest ${c.type === 'ATTACK' ? 'text-red-400' : c.type === 'DEFENSE' ? 'text-blue-400' : c.type === 'UTILITY' ? 'text-purple-400' : 'text-[#39ff14]'} truncate`}>{c.type} • {c.effect}</span>
+                     </div>
+                   </div>
+                   <button disabled={isLocked} onClick={() => handleDeleteCard(c.id, c.name)} className="text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 p-2 rounded-md transition-colors disabled:opacity-50 shrink-0 border border-zinc-700/50">
+                     <Trash2 size={12} />
+                   </button>
+                 </div>
+               ))}
+               {cards.length === 0 && (
+                 <div className="text-center text-zinc-600 text-[10px] italic py-4">No cards forged yet.</div>
+               )}
              </div>
           </div>
         </section>
@@ -1599,8 +1627,8 @@ export default function ControlRoom() {
                  {bounty.status === 'active' ? (
                     <button type="button" disabled={isLocked} onClick={() => setCompletingBounty(bounty)} className="text-[10px] bg-purple-500/20 text-purple-400 border border-purple-500/50 hover:bg-purple-500/40 px-3 py-1.5 rounded uppercase font-bold transition-colors disabled:opacity-50">
                       Complete
-                    </button>
-                 ) : (
+                     </button>
+                  ) : (
                     <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest px-2">Finished</span>
                  )}
                </div>
@@ -1649,3 +1677,9 @@ export default function ControlRoom() {
     </main>
   );
 }
+
+
+
+
+
+
