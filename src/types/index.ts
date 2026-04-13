@@ -7,6 +7,7 @@ export interface ActiveEffect {
   isPending: boolean;
   icon: string;
   sourceCardId?: string;
+  sourceTeamId?: string;
   targetTeamId?: string;
 }
 
