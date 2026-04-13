@@ -28,40 +28,17 @@ export default function CinematicLogin() {
   const [inputValue, setInputValue] = useState("");
   const [glitchLogs, setGlitchLogs] = useState<string[]>([]);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-
-  // Check if already authenticated on mount
+  
+  // Check if already authenticated via sessionStorage
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await fetch("/api/auth/session");
-        if (response.ok) {
-          // Already authenticated, redirect to control room
-          router.push("/control-room");
-        } else {
-          setCheckingAuth(false);
-        }
-      } catch (error) {
-        setCheckingAuth(false);
+    if (typeof window !== 'undefined') {
+      const isAuth = sessionStorage.getItem('adminAuth');
+      if (isAuth === 'true') {
+        // Already authenticated, redirect to control room
+        router.replace('/control-room');
       }
-    };
-
-    checkAuth();
+    }
   }, [router]);
-
-  // Show loading while checking auth
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500 mb-4"></div>
-          <p className="text-cyan-400 font-mono text-sm">
-            Checking authentication...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const playSound = (type: "error" | "unlock") => {
     try {
@@ -134,14 +111,12 @@ export default function CinematicLogin() {
 
         setTimeout(() => {
           setStep("AUTHENTICATING");
-          syncSession("login")
-            .then((res) => {
-              if (res.success) {
-                router.refresh();
-                setTimeout(() => router.push("/control-room"), 500);
-              } else triggerGlitch("PASSPHRASE");
-            })
-            .catch(() => triggerGlitch("PASSPHRASE"));
+          // Set session authentication
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('adminAuth', 'true');
+          }
+          router.refresh();
+          setTimeout(() => router.push("/control-room"), 500);
         }, 1000);
       } else {
         triggerGlitch("PASSPHRASE");

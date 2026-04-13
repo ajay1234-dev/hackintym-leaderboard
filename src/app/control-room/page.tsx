@@ -16,7 +16,14 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { Team, Card, Injection, Bounty } from "@/types";
+import {
+  Team,
+  Card,
+  Injection,
+  Bounty,
+  PendingCardSubmission,
+  CardWindowState,
+} from "@/types";
 import { syncSession } from "@/app/actions";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -35,7 +42,9 @@ import {
   Target,
   Timer,
   Undo,
+  Orbit,
 } from "lucide-react";
+import Link from "next/link";
 import { CARD_ICONS } from "@/lib/icons";
 import {
   getActiveMultiplier,
@@ -43,6 +52,8 @@ import {
   getActiveGlobalPhenomena,
 } from "@/lib/effectEngine";
 import { playResolveSound } from "@/lib/soundManager";
+import { useCardSubmission } from "@/hooks/useCardSubmission";
+import { PendingCardsPanel } from "@/components/dashboard/PendingCardsPanel";
 
 export default function ControlRoom() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -51,8 +62,21 @@ export default function ControlRoom() {
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [uiClock, setUiClock] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const router = useRouter();
+  
+  // Route Protection: Check session authentication
+  useEffect(() => {
+    const isAuth = typeof window !== 'undefined' ? sessionStorage.getItem('adminAuth') : null;
+    
+    if (!isAuth) {
+      // Not authenticated - redirect to login
+      router.replace('/control-room/login');
+    } else {
+      // Authenticated - allow access
+      setIsAdminAuthenticated(true);
+    }
+  }, [router]);
 
   // Registry State
   const [newTeamName, setNewTeamName] = useState("");
@@ -146,23 +170,130 @@ export default function ControlRoom() {
     }, 3000);
   };
 
-  // Security: Check authentication on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await fetch("/api/auth/session");
-        if (!response.ok) {
-          router.push("/control-room/login");
-          return;
-        }
-        setIsAuthenticated(true);
-      } catch (error) {
-        router.push("/control-room/login");
-      }
-    };
+  // Card Submission System
+  const {
+    pendingSubmissions,
+    cardWindow,
+    timeRemaining,
+    submitCard,
+    deletePendingSubmission,
+    openCardWindow,
+    closeCardWindow,
+    clearAllSubmissions,
+  } = useCardSubmission({ teams, cards });
 
-    checkAuth();
-  }, [router]);
+  // Execute a pending card submission
+  const executePendingCard = async (submission: PendingCardSubmission) => {
+    const card = cards.find((c) => c.id === submission.cardId);
+    const team = teams.find((t) => t.id === submission.teamId);
+    const targetTeam = teams.find((t) => t.id === submission.targetTeamId);
+
+    if (!card || !team) {
+      showToast("Invalid card or team data", "info");
+      return;
+    }
+
+    try {
+      // Reuse the existing handleUseCard logic by calling it with submission data
+      await handleUseCard(
+        submission.teamId,
+        submission.teamName,
+        submission.cardId,
+        0 // index doesn't matter for execution
+      );
+
+      // Delete the pending submission
+      await deleteDoc(doc(db, "pendingCards", submission.id));
+
+      showToast(
+        `${team.teamName} activated ${card.name}${
+          targetTeam ? ` on ${targetTeam.teamName}` : ""
+        }`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error executing pending card:", error);
+      showToast("Failed to execute card", "info");
+    }
+  };
+
+  // Execute all pending submissions
+  const executeAllPendingCards = async () => {
+    if (pendingSubmissions.length === 0) {
+      showToast("No pending submissions to execute", "info");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Execute all ${pendingSubmissions.length} pending card submissions?`
+      )
+    ) {
+      return;
+    }
+
+    for (const submission of pendingSubmissions) {
+      await executePendingCard(submission);
+    }
+
+    showToast(`Executed ${pendingSubmissions.length} cards`, "success");
+  };
+
+  // Handle delete pending submission
+  const handleDeletePending = async (submissionId: string) => {
+    try {
+      await deleteDoc(doc(db, "pendingCards", submissionId));
+      showToast("Submission deleted", "info");
+    } catch (error) {
+      console.error("Error deleting submission:", error);
+      showToast("Failed to delete submission", "info");
+    }
+  };
+
+  // Handle open card window
+  const handleOpenCardWindow = async (duration: number) => {
+    try {
+      await setDoc(doc(db, "globalState", "cardWindow"), {
+        isOpen: true,
+        endsAt: Date.now() + duration * 1000,
+        duration,
+      });
+      showToast(`Card window opened for ${duration / 60} minute(s)`, "success");
+    } catch (error) {
+      console.error("Error opening card window:", error);
+      showToast("Failed to open card window", "info");
+    }
+  };
+
+  // Handle close card window
+  const handleCloseCardWindow = async () => {
+    try {
+      await setDoc(doc(db, "globalState", "cardWindow"), {
+        isOpen: false,
+        endsAt: null,
+        duration: cardWindow.duration,
+      });
+      showToast("Card window closed", "info");
+    } catch (error) {
+      console.error("Error closing card window:", error);
+      showToast("Failed to close card window", "info");
+    }
+  };
+
+  // Handle clear all submissions
+  const handleClearAllSubmissions = async () => {
+    if (!confirm("Clear all pending card submissions?")) {
+      return;
+    }
+
+    try {
+      await clearAllSubmissions();
+      showToast("All submissions cleared", "info");
+    } catch (error) {
+      console.error("Error clearing submissions:", error);
+      showToast("Failed to clear submissions", "info");
+    }
+  };
 
   useEffect(() => {
     setUiClock(Date.now());
@@ -1416,9 +1547,17 @@ export default function ControlRoom() {
 
   const handleLogout = async () => {
     try {
+      // Clear session authentication
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('adminAuth');
+      }
+      
+      // Clear server session
       await signOut(auth);
       await syncSession("logout");
-      router.push("/");
+      
+      // Redirect to login
+      router.push("/control-room/login");
     } catch (e) {
       console.error("Logout failed", e);
     }
@@ -1446,15 +1585,13 @@ export default function ControlRoom() {
       )
   ).length;
 
-  // Show loading while checking authentication (after all hooks)
-  if (!isAuthenticated) {
+  // Show loading while checking authentication
+  if (!isAdminAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500 mb-4"></div>
-          <p className="text-cyan-400 font-mono text-sm">
-            Verifying authentication...
-          </p>
+          <p className="text-cyan-400 font-mono text-sm">Verifying session...</p>
         </div>
       </div>
     );
@@ -1516,6 +1653,14 @@ export default function ControlRoom() {
         </div>
 
         <div className="flex flex-col lg:flex-row w-full xl:w-auto gap-4 items-stretch lg:items-center">
+          <Link
+            href="/control-room/arena"
+            className="flex items-center justify-center gap-2 bg-red-600/10 hover:bg-red-600/20 text-red-500 border border-red-500/30 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:shadow-[0_0_20px_rgba(220,38,38,0.2)]"
+          >
+            <Orbit className="w-4 h-4" />
+            Arena Command
+          </Link>
+
           {/* Action Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800 w-full sm:w-auto">
             <div className="relative w-full sm:w-auto">

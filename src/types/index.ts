@@ -28,7 +28,7 @@ export interface ActivityLog {
   id: string;
   action?: string; // Legacy
   teamName?: string;
-  actionType?: 'score' | 'card' | 'bounty' | 'injection' | 'system';
+  actionType?: "score" | "card" | "bounty" | "injection" | "system";
   message?: string;
   points?: number;
   timestamp: number;
@@ -37,12 +37,19 @@ export interface ActivityLog {
 export interface Card {
   id: string;
   name: string;
-  rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
-  type: 'BOOST' | 'ATTACK' | 'DEFENSE' | 'UTILITY' | string;
+  rarity: "COMMON" | "RARE" | "LEGENDARY";
+  type: "BOOST" | "ATTACK" | "DEFENSE" | "UTILITY" | string;
   description: string;
-  effect: 'add_points' | 'multiply_score' | 'deduct_points' | 'block' | 'freeze' | 'extend_time' | string;
+  effect:
+    | "add_points"
+    | "multiply_score"
+    | "deduct_points"
+    | "block"
+    | "freeze"
+    | "extend_time"
+    | string;
   value: number | null;
-  durationType: 'INSTANT' | 'NEXT_ACTION' | 'TIMED' | string;
+  durationType: "INSTANT" | "NEXT_ACTION" | "TIMED" | string;
   durationValue: number | null;
   cooldown?: number;
   icon: string;
@@ -55,11 +62,11 @@ export interface Injection {
   title: string;
   description: string;
   points: number;
-  status: 'active' | 'resolved' | 'staged';
-  type?: 'global' | 'selective';
+  status: "active" | "resolved" | "staged";
+  type?: "global" | "selective";
   targetTeamId?: string;
   rewardCardId?: string;
-  eventType?: 'POINTS' | 'MULTIPLIER' | 'FREEZE' | 'CARD_DROP' | 'SPECIAL_RULE';
+  eventType?: "POINTS" | "MULTIPLIER" | "FREEZE" | "CARD_DROP" | "SPECIAL_RULE";
   multiplier?: number;
   duration?: number;
   expiresAt?: number;
@@ -72,6 +79,39 @@ export interface Bounty {
   title: string;
   description: string;
   rewardPoints: number;
-  status: 'active' | 'completed';
+  status: "active" | "completed";
   rewardCardId?: string;
+}
+
+export interface PendingCardSubmission {
+  id: string;
+  teamId: string;
+  teamName: string;
+  cardId: string;
+  targetTeamId?: string;
+  submittedAt: number;
+}
+
+export interface CardWindowState {
+  isOpen: boolean;
+  endsAt: number | null;
+  duration: number; // in seconds
+}
+
+export interface ArenaBox {
+  id: string;
+  cards: string[]; // typically exactly 2 cards: [commonCardId, rareCardId]
+}
+
+export interface ArenaSelection {
+  id: string;
+  teamId: string;
+  selectedBoxId: string;
+  isLocked: boolean;
+}
+
+export interface ArenaState {
+  isRevealed: boolean;
+  isRevealing?: boolean;
+  selectionDeadline?: number | null;
 }
