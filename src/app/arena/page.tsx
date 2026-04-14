@@ -263,7 +263,7 @@ export default function SelectionZone() {
               Selection Zone
             </h1>
             <p className="text-zinc-500 uppercase tracking-[0.3em] text-[10px] sm:text-xs mt-2">
-              Secure your Energy Node
+              Secure your teams by your hands
             </p>
             {timeLeft !== null && !arenaState.isRevealed && !arenaState.isRevealing && (
               <div className="mt-4 flex">
