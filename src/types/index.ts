@@ -100,7 +100,8 @@ export interface CardWindowState {
 
 export interface ArenaBox {
   id: string;
-  cards: string[]; // typically exactly 2 cards: [commonCardId, rareCardId]
+  cards: string[]; // typically exactly 2 cards: [cardId1, cardId2]
+  color?: string; // hex color for mystery pod
 }
 
 export interface ArenaSelection {

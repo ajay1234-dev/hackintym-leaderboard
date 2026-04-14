@@ -44,6 +44,10 @@ export default function ArenaAdmin() {
   const [arenaState, setArenaState] = useState<ArenaState>({ isRevealed: false });
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Manual Pod Creator State
+  const [newPodCard1, setNewPodCard1] = useState<string>("");
+  const [newPodCard2, setNewPodCard2] = useState<string>("");
+
   // Route Protection
   useEffect(() => {
     const isAuth = typeof window !== 'undefined' ? sessionStorage.getItem('adminAuth') : null;
@@ -100,54 +104,29 @@ export default function ArenaAdmin() {
 
   // --- Actions ---
 
-  const handleGeneratePods = async () => {
-    if (teams.length === 0) return alert("System Error: No teams found.");
-    
-    // Pool Check
-    const commonPool = cards.filter(c => c.rarity === 'COMMON');
-    const rarePool = cards.filter(c => c.rarity === 'RARE');
-
-    if (commonPool.length === 0 || rarePool.length === 0) {
-      return alert("🛑 Insufficient card pool. Please ensure at least one COMMON and one RARE card exist in the database.");
+  const handleAddPod = async () => {
+    if (!newPodCard1 || !newPodCard2) {
+      return alert("🛑 You must select exactly 2 cards to create a pod.");
     }
-
-    if (!confirm(`Generate unique Mystery Pods for ${teams.length} teams? This will clear existing selections.`)) return;
-
+    
     setIsProcessing(true);
     try {
-      const batch = writeBatch(db);
-
-      // 1. Clear existing boxes and selections
-      const boxesSnap = await getDocs(collection(db, "cardBoxes"));
-      boxesSnap.docs.forEach(d => batch.delete(d.ref));
+      const colors = ["#3b82f6", "#eab308", "#a855f7", "#06b6d4", "#22c55e"];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      const boxId = `pod-${boxes.length + 1}-${Math.random().toString(36).substring(2, 7)}`;
       
-      const selectsSnap = await getDocs(collection(db, "teamSelections"));
-      selectsSnap.docs.forEach(d => batch.delete(d.ref));
+      const boxRef = doc(db, "cardBoxes", boxId);
+      await setDoc(boxRef, {
+        id: boxId,
+        cards: [newPodCard1, newPodCard2],
+        color: randomColor
+      });
 
-      // 2. Generate new boxes (1 Common + 1 Rare) for N teams
-      // We shuffle to ensure randomness even with duplicates
-      for (let i = 0; i < teams.length; i++) {
-        const randomCommon = commonPool[Math.floor(Math.random() * commonPool.length)];
-        const randomRare = rarePool[Math.floor(Math.random() * rarePool.length)];
-        
-        const boxId = `pod-${i + 1}-${Math.random().toString(36).substring(2, 7)}`;
-        const boxRef = doc(db, "cardBoxes", boxId);
-        
-        batch.set(boxRef, {
-          id: boxId,
-          cards: [randomCommon.id, randomRare.id]
-        });
-      }
-
-      // 3. Reset Arena State
-      const stateRef = doc(db, "arenaState", "global");
-      batch.set(stateRef, { isRevealed: false }, { merge: true });
-
-      await batch.commit();
-      alert("✅ Mystery Pods deployed successfully.");
+      setNewPodCard1("");
+      setNewPodCard2("");
     } catch (e) {
       console.error(e);
-      alert("Failed to generate pods.");
+      alert("Failed to generate pod.");
     } finally {
       setIsProcessing(false);
     }
@@ -224,20 +203,22 @@ export default function ArenaAdmin() {
         const box = boxes.find(b => b.id === selection.selectedBoxId);
 
         if (team && box) {
-          if (!team.cardsOwned || team.cardsOwned.length === 0) {
-            const teamRef = doc(db, "teams", team.id);
-            batch2.update(teamRef, { cardsOwned: box.cards });
+          const teamRef = doc(db, "teams", team.id);
+          
+          // Use arrayUnion to safely add multiple cards
+          batch2.update(teamRef, { 
+            cardsOwned: arrayUnion(...box.cards)
+          });
 
-            const logRef = doc(collection(db, "activityLogs"));
-            batch2.set(logRef, {
-              actionType: "system",
-              message: `Arena Payload Delivered: 2 Cards assigned to ${team.teamName}`,
-              teamName: team.teamName,
-              timestamp: Date.now()
-            });
+          const logRef = doc(collection(db, "activityLogs"));
+          batch2.set(logRef, {
+            actionType: "system",
+            message: `Arena Payload Delivered: 2 Cards assigned to ${team.teamName}`,
+            teamName: team.teamName,
+            timestamp: Date.now()
+          });
 
-            assignedCount++;
-          }
+          assignedCount++;
         }
       }
 
@@ -308,15 +289,6 @@ export default function ArenaAdmin() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleGeneratePods}
-            disabled={isProcessing || arenaState.isRevealed || arenaState.isRevealing}
-            className="flex items-center gap-2 bg-zinc-100 hover:bg-white text-black px-5 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs uppercase tracking-widest"
-          >
-            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Generate Pods
-          </button>
-
           {!arenaState.selectionDeadline && !arenaState.isRevealed && (
             <button
               onClick={handleStartTimer}
@@ -351,6 +323,50 @@ export default function ArenaAdmin() {
         
         {/* Connection Stats */}
         <div className="lg:col-span-1 space-y-6">
+          
+          {/* Manual Pod Creator */}
+          {!arenaState.isRevealed && !arenaState.isRevealing && (
+            <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-2xl">
+              <h2 className="text-xs uppercase tracking-widest text-zinc-500 mb-6 font-bold flex items-center gap-2">
+                <RefreshCw className="w-3 h-3 text-[#39ff14]" /> Deploy Mystery Pod
+              </h2>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Card 1</label>
+                  <select
+                    value={newPodCard1}
+                    onChange={(e) => setNewPodCard1(e.target.value)}
+                    className="w-full bg-black border border-zinc-700 text-white p-2 rounded-lg text-sm outline-none focus:border-[#39ff14]"
+                  >
+                    <option value="">-- SELECT CARD --</option>
+                    {cards.map(c => <option key={c.id} value={c.id}>{c.icon || '🃏'} {c.name}</option>)}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Card 2</label>
+                  <select
+                    value={newPodCard2}
+                    onChange={(e) => setNewPodCard2(e.target.value)}
+                    className="w-full bg-black border border-zinc-700 text-white p-2 rounded-lg text-sm outline-none focus:border-[#39ff14]"
+                  >
+                    <option value="">-- SELECT CARD --</option>
+                    {cards.map(c => <option key={c.id} value={c.id}>{c.icon || '🃏'} {c.name}</option>)}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleAddPod}
+                  disabled={isProcessing || !newPodCard1 || !newPodCard2}
+                  className="w-full bg-zinc-100 hover:bg-white text-black px-4 py-2.5 rounded-lg font-black uppercase tracking-widest text-xs transition-colors disabled:opacity-50 mt-2"
+                >
+                  Create & Deploy Pod
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-2xl">
             <h2 className="text-xs uppercase tracking-widest text-zinc-500 mb-6 font-bold flex items-center gap-2">
               <Zap className="w-3 h-3 text-yellow-400" /> System Integrity
@@ -418,12 +434,7 @@ export default function ArenaAdmin() {
               <div className="flex flex-col items-center justify-center py-32 text-zinc-600 grayscale">
                 <AlertTriangle className="w-12 h-12 mb-4 opacity-20" />
                 <p className="uppercase tracking-[0.2em] text-[10px]">No active deployment detected</p>
-                <button 
-                  onClick={handleGeneratePods}
-                  className="mt-6 text-xs text-red-500 hover:text-red-400 underline uppercase tracking-widest"
-                >
-                  Initiate Generation Protocol
-                </button>
+                <p className="mt-2 text-xs uppercase tracking-widest text-[#39ff14] opacity-50">Create Pods using the panel above</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">

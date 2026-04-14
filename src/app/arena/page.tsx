@@ -97,7 +97,7 @@ export default function SelectionZone() {
   }, []);
 
   const mySelection = selections.find((s) => s.teamId === selectedTeamId);
-  const isInputLocked = mySelection !== undefined || arenaState.isRevealed || arenaState.isRevealing || timeLeft === 0;
+  const isInputLocked = mySelection !== undefined || arenaState.isRevealed || arenaState.isRevealing || (timeLeft !== null && timeLeft <= 0);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     if (isInputLocked || !selectedTeamId) {
@@ -328,8 +328,8 @@ export default function SelectionZone() {
                     <div className="text-[#39ff14] font-black uppercase text-sm truncate max-w-[160px]">
                       {selectedTeamData.teamName}
                     </div>
-                    <div className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${mySelection ? 'text-zinc-400' : 'text-cyan-400'}`}>
-                      {mySelection ? "STATUS: LOCKED 🔒" : "DRAG ME TO A NODE"}
+                    <div className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${mySelection ? 'text-zinc-400' : (timeLeft !== null && timeLeft <= 0) ? 'text-red-500' : 'text-cyan-400'}`}>
+                      {mySelection ? "STATUS: LOCKED 🔒" : (timeLeft !== null && timeLeft <= 0) ? "SELECTION CLOSED" : "DRAG ME TO A NODE"}
                     </div>
                   </div>
                   {!mySelection && !isInputLocked && (
@@ -337,6 +337,9 @@ export default function SelectionZone() {
                   )}
                   {mySelection && (
                     <Lock className="w-5 h-5 text-[#39ff14]/70" />
+                  )}
+                  {(timeLeft !== null && timeLeft <= 0 && !mySelection) && (
+                    <ShieldAlert className="w-5 h-5 text-red-500/70" />
                   )}
                 </div>
               </motion.div>
@@ -368,31 +371,36 @@ export default function SelectionZone() {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={
                   isInvalidDrop 
-                    ? { x: [-5, 5, -5, 5, 0], scale: 1 } 
+                    ? { x: [-10, 10, -10, 10, 0], scale: 1 } 
                     : arenaState.isRevealing 
-                      ? { x: [-3, 3, -3, 3, 0], y: [3, -3, -3, 3, 0], scale: 1.05 } 
+                      ? { x: [-5, 5, -5, 5, -2, 2, 0], y: [5, -5, -5, 5, 2, -2, 0], scale: 1.05 } 
                       : { opacity: 1, scale: isHovered && !isLocked ? 1.05 : 1 }
                 }
                 transition={
                   isInvalidDrop 
                     ? { duration: 0.4 } 
                     : arenaState.isRevealing 
-                      ? { repeat: Infinity, duration: 0.3 } 
+                      ? { repeat: Infinity, duration: 0.1 } 
                       : { delay: idx * 0.05, type: "spring" }
                 }
                 onDragOver={(e) => handleDragOver(e, box.id)}
                 onDragLeave={(e) => handleDragLeave(e, box.id)}
                 onDrop={(e) => handleDrop(e, box.id)}
+                style={
+                  !arenaState.isRevealed && !isMyLock && !isHovered && box.color && !arenaState.isRevealing
+                    ? { borderColor: box.color, boxShadow: `0 0 20px ${box.color}20` }
+                    : {}
+                }
                 className={`
                   relative aspect-square rounded-2xl flex flex-col items-center justify-center p-4 transition-colors duration-300 overflow-hidden
                   ${arenaState.isRevealing
-                    ? "bg-purple-900/20 border-2 border-purple-500/80 shadow-[0_0_20px_rgba(168,85,247,0.4)]"
+                    ? "bg-purple-900/20 shadow-[0_0_40px_rgba(168,85,247,0.6)] border-2 border-purple-500/80"
                     : arenaState.isRevealed 
                     ? "bg-zinc-900 border-2 border-zinc-700"
                     : isLocked 
                       ? isMyLock 
                         ? "bg-[#39ff14]/5 border-2 border-[#39ff14]/50 shadow-[0_0_30px_rgba(57,255,20,0.2)]" 
-                        : "bg-red-500/5 border-2 border-red-500/30 opacity-70" 
+                        : "bg-black/80 border-2 border-zinc-800" 
                       : isHovered
                         ? "bg-cyan-500/20 border-2 border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.6)]"
                         : "bg-zinc-900/50 border border-zinc-800 border-dashed"
@@ -406,13 +414,16 @@ export default function SelectionZone() {
 
                 {!arenaState.isRevealed ? (
                   <>
-                    <Cpu className={`w-8 h-8 sm:w-12 sm:h-12 mb-2 sm:mb-4 transition-all duration-500 ${arenaState.isRevealing ? 'text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.8)] animate-pulse' : isMyLock ? 'text-[#39ff14] animate-pulse drop-shadow-[0_0_10px_rgba(57,255,20,0.8)]' : isLocked ? 'text-red-500' : isHovered ? 'text-cyan-300 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)] scale-110' : 'text-zinc-600'}`} />
+                    <Cpu 
+                      className={`w-8 h-8 sm:w-12 sm:h-12 mb-2 sm:mb-4 transition-all duration-500 ${arenaState.isRevealing ? 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,1)] animate-pulse' : isMyLock ? 'text-[#39ff14] animate-pulse drop-shadow-[0_0_10px_rgba(57,255,20,0.8)]' : isHovered ? 'text-cyan-300 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)] scale-110' : 'opacity-70'}`} 
+                      style={!isMyLock && !isHovered && !arenaState.isRevealing && box.color ? { color: box.color, filter: `drop-shadow(0 0 10px ${box.color})` } : {}}
+                    />
                     
                     <div className="text-[10px] sm:text-xs uppercase tracking-widest text-center font-bold px-2">
                       {isLocked ? (
                         <div className="flex flex-col items-center gap-1">
                           <Lock className="w-3 h-3 sm:w-4 sm:h-4 mb-0.5" />
-                          <span className={isMyLock ? 'text-[#39ff14]' : 'text-red-500'}>
+                          <span className={isMyLock ? 'text-[#39ff14]' : 'text-zinc-500'}>
                             LOCKED 🔒
                           </span>
                           {lockedTeam && <span className="text-[10px] text-white mt-1 border-t border-zinc-700 pt-1 w-full truncate">{lockedTeam.teamName}</span>}
@@ -420,35 +431,29 @@ export default function SelectionZone() {
                       ) : isHovered ? (
                         <span className="text-cyan-300">DROP HERE / /</span>
                       ) : (
-                        <span className="opacity-50 tracking-[0.2em]">AVAILABLE</span>
+                        <span className="font-black tracking-[0.2em]" style={box.color ? { color: box.color } : {}}>ENERGY NODE</span>
                       )}
                     </div>
                   </>
                 ) : (
-                  // Revealed State
+                  // Revealed State (ICON ONLY)
                   <motion.div 
                     initial={{ rotateY: 90, opacity: 0 }}
                     animate={{ rotateY: 0, opacity: 1 }}
-                    transition={{ duration: 0.6, type: "spring" }}
+                    transition={{ duration: 0.6, type: "spring", damping: 12 }}
                     className="flex flex-col items-center justify-center w-full h-full text-center"
                   >
-                    <h3 className="text-[8px] sm:text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-2">Payload</h3>
-                    {boxCards.map((bc) => (
-                      <div 
-                        key={bc.id} 
-                        className={`mb-2 text-xs font-bold px-2 py-1 rounded w-full truncate border ${
-                          bc.rarity === 'RARE' 
-                            ? "bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]" 
-                            : "bg-blue-500/10 text-blue-300 border-blue-500/30"
-                        }`}
-                      >
-                        {bc.name}
-                      </div>
-                    ))}
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      {boxCards.map((bc) => (
+                        <span key={bc.id} className="text-3xl sm:text-4xl drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                          {bc.icon || '🃏'}
+                        </span>
+                      ))}
+                    </div>
 
                     {/* Show who owns it now */}
                     {lockedTeam && (
-                      <div className="absolute bottom-2 left-0 right-0 text-[9px] text-[#39ff14] uppercase tracking-widest opacity-80 px-2 truncate">
+                      <div className="absolute bottom-2 left-0 right-0 text-[10px] font-black text-[#39ff14] uppercase tracking-widest opacity-90 px-2 truncate">
                         {lockedTeam.teamName}
                       </div>
                     )}
