@@ -284,29 +284,33 @@ export default function SelectionZone() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, x: 20 }}
                 animate={{ opacity: 1, scale: 1, x: 0 }}
-                className={`w-full sm:w-72 p-3 rounded-lg border ${
-                  mySelection
-                    ? "bg-[#39ff14]/10 border-[#39ff14]/50 shadow-[0_0_15px_rgba(57,255,20,0.2)]"
-                    : "bg-cyan-500/10 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-grab active:cursor-grabbing hover:bg-cyan-500/20"
-                } transition-colors relative origin-right overflow-hidden flex items-center justify-between`}
-                draggable={!mySelection && !isInputLocked}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
+                className="w-full sm:w-72 relative origin-right"
               >
-                <div>
-                  <div className="text-[#39ff14] font-black uppercase text-sm truncate max-w-[160px]">
-                    {selectedTeamData.teamName}
+                <div
+                  className={`w-full p-3 rounded-lg border ${
+                    mySelection
+                      ? "bg-[#39ff14]/10 border-[#39ff14]/50 shadow-[0_0_15px_rgba(57,255,20,0.2)]"
+                      : "bg-cyan-500/10 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-grab active:cursor-grabbing hover:bg-cyan-500/20"
+                  } transition-colors overflow-hidden flex items-center justify-between`}
+                  draggable={!mySelection && !isInputLocked}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                >
+                  <div>
+                    <div className="text-[#39ff14] font-black uppercase text-sm truncate max-w-[160px]">
+                      {selectedTeamData.teamName}
+                    </div>
+                    <div className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${mySelection ? 'text-zinc-400' : 'text-cyan-400'}`}>
+                      {mySelection ? "STATUS: LOCKED 🔒" : "DRAG ME TO A NODE"}
+                    </div>
                   </div>
-                  <div className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${mySelection ? 'text-zinc-400' : 'text-cyan-400'}`}>
-                    {mySelection ? "STATUS: LOCKED 🔒" : "DRAG ME TO A NODE"}
-                  </div>
+                  {!mySelection && !isInputLocked && (
+                    <GripHorizontal className="w-5 h-5 text-cyan-400/50" />
+                  )}
+                  {mySelection && (
+                    <Lock className="w-5 h-5 text-[#39ff14]/70" />
+                  )}
                 </div>
-                {!mySelection && !isInputLocked && (
-                  <GripHorizontal className="w-5 h-5 text-cyan-400/50" />
-                )}
-                {mySelection && (
-                  <Lock className="w-5 h-5 text-[#39ff14]/70" />
-                )}
               </motion.div>
             )}
           </AnimatePresence>
