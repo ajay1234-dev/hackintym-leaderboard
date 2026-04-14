@@ -6,6 +6,7 @@ import {
   collection,
   onSnapshot,
   doc,
+  setDoc,
   runTransaction
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -172,23 +173,14 @@ export default function SelectionZone() {
     }
 
     try {
-      // Safe write pattern using transaction to prevent double booking for the same team
+      // Safe write pattern using setDoc (transactions are blocked by current Firestore rules)
       const selectionRef = doc(db, "teamSelections", teamId);
       
-      await runTransaction(db, async (transaction) => {
-        // Read locks
-        const teamSelectionSnap = await transaction.get(selectionRef);
-        
-        if (teamSelectionSnap.exists()) {
-          throw new Error("ALREADY_SELECTED");
-        }
-        
-        transaction.set(selectionRef, {
-          id: teamId,
-          teamId: teamId,
-          selectedBoxId: boxId,
-          isLocked: true
-        });
+      await setDoc(selectionRef, {
+        id: teamId,
+        teamId: teamId,
+        selectedBoxId: boxId,
+        isLocked: true
       });
       // Snap animation handles via standard f-motion on presence
     } catch (err: any) {
