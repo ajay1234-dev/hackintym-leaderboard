@@ -7,7 +7,8 @@ import {
   onSnapshot,
   doc,
   setDoc,
-  runTransaction
+  runTransaction,
+  getDocs
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ArenaBox, ArenaSelection, ArenaState, Team, Card } from "@/types";
@@ -142,7 +143,14 @@ export default function SelectionZone() {
 
     if (!teamId) return;
 
-    if (arenaState.isRevealed || arenaState.isRevealing || timeLeft === 0) {
+    if (timeLeft !== null && timeLeft <= 0) {
+      showToast("Selection period has ended.");
+      setInvalidDropBoxId(boxId);
+      setTimeout(() => setInvalidDropBoxId(null), 500);
+      return;
+    }
+
+    if (arenaState.isRevealed || arenaState.isRevealing) {
       showToast("Selection period has ended.");
       setInvalidDropBoxId(boxId);
       setTimeout(() => setInvalidDropBoxId(null), 500);
@@ -154,7 +162,7 @@ export default function SelectionZone() {
        return;
     }
 
-    // Validation: Has this team already selected?
+    // UI-side optimistic validation: Has this team already selected?
     const hasSelected = selections.some((s) => s.teamId === teamId);
     if (hasSelected) {
       showToast("Your team has already secured an Energy Node.");
@@ -163,7 +171,7 @@ export default function SelectionZone() {
       return;
     }
 
-    // Validation: Is this box already selected?
+    // UI-side optimistic validation: Is this box already selected?
     const isBoxSelected = selections.some((s) => s.selectedBoxId === boxId);
     if (isBoxSelected) {
       showToast("This Energy Node has already been secured by another team.");
@@ -173,26 +181,45 @@ export default function SelectionZone() {
     }
 
     try {
-      // Safe write pattern using setDoc (transactions are blocked by current Firestore rules)
-      const selectionRef = doc(db, "teamSelections", teamId);
-      
-      await setDoc(selectionRef, {
-        id: teamId,
-        teamId: teamId,
-        selectedBoxId: boxId,
-        isLocked: true
+      await runTransaction(db, async (transaction) => {
+        const selectionRef = doc(db, "teamSelections", teamId);
+        
+        const existingSelection = await transaction.get(selectionRef);
+
+        if (existingSelection.exists()) {
+          throw new Error("Team already selected a pod");
+        }
+
+        const allSelectionsQuery = await getDocs(
+          collection(db, "teamSelections")
+        );
+
+        const isBoxTaken = allSelectionsQuery.docs.some(
+          (doc) => doc.data().selectedBoxId === boxId
+        );
+
+        if (isBoxTaken) {
+          throw new Error("Pod already taken");
+        }
+
+        transaction.set(selectionRef, {
+          teamId,
+          selectedBoxId: boxId,
+          isLocked: true,
+          lockedAt: Date.now()
+        });
       });
-      // Snap animation handles via standard f-motion on presence
+
+      showToast("Pod Locked Successfully ✅");
     } catch (err: any) {
       console.error("Lock failed:", err);
       const msg = err instanceof Error ? err.message : String(err);
       
-      if (msg.includes("ALREADY_SELECTED")) {
+      if (msg.includes("Team already selected")) {
         showToast("Your team has already secured a Node!");
-      } else if (msg.includes("BOX_TAKEN")) {
+      } else if (msg.includes("Pod already taken")) {
         showToast("Node grabbed by another team just now!");
       } else {
-        // Use generic error message if it's a firebase permission failure, but log it locally
         showToast(`Sync failure: ${msg.slice(0, 30)}...`);
       }
       setInvalidDropBoxId(boxId);
@@ -274,6 +301,9 @@ export default function SelectionZone() {
                 </option>
               ))}
             </select>
+            <p className="text-[9px] text-zinc-500 mt-2 leading-tight">
+              Having issues? Disable AdBlock / Brave Shields or whitelist Firebase to prevent <span className="text-red-400 font-bold">ERR_BLOCKED_BY_CLIENT</span>.
+            </p>
           </div>
 
           {/* Draggable Team Badge */}
