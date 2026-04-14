@@ -172,15 +172,29 @@ export default function SelectionZone() {
     }
 
     try {
-      // Safe write pattern using transaction to prevent double booking for the same team
+      // Safe write pattern using transaction to prevent double booking for the same team AND the same box
       const selectionRef = doc(db, "teamSelections", teamId);
+      const lockRef = doc(db, "teamSelections", `lock_${boxId}`);
+      
       await runTransaction(db, async (transaction) => {
+        // Read locks
         const teamSelectionSnap = await transaction.get(selectionRef);
+        const lockSnap = await transaction.get(lockRef);
+        
         if (teamSelectionSnap.exists()) {
           throw new Error("ALREADY_SELECTED");
         }
-        // Since we can't easily query within client transaction for boxId, we rely on the optimistic frontend check
-        // for box taken, but we strongly guarantee the team cannot submit multiple forms.
+        if (lockSnap.exists()) {
+          throw new Error("BOX_TAKEN");
+        }
+        
+        // Write locks
+        transaction.set(lockRef, { 
+          type: "lock", 
+          lockedBy: teamId, 
+          lockedAt: Date.now() 
+        });
+        
         transaction.set(selectionRef, {
           id: teamId,
           teamId: teamId,
@@ -190,12 +204,17 @@ export default function SelectionZone() {
         });
       });
       // Snap animation handles via standard f-motion on presence
-    } catch (e: any) {
-      console.error("Lock failed:", e);
-      if (e.message === "ALREADY_SELECTED") {
+    } catch (err: any) {
+      console.error("Lock failed:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      
+      if (msg.includes("ALREADY_SELECTED")) {
         showToast("Your team has already secured a Node!");
+      } else if (msg.includes("BOX_TAKEN")) {
+        showToast("Node grabbed by another team just now!");
       } else {
-        showToast("System synchronization failure. Try again.");
+        // Use generic error message if it's a firebase permission failure, but log it locally
+        showToast(`Sync failure: ${msg.slice(0, 30)}...`);
       }
       setInvalidDropBoxId(boxId);
       setTimeout(() => setInvalidDropBoxId(null), 500);
