@@ -122,15 +122,7 @@ export default function SelectionZone() {
   const isInputLocked = mySelection !== undefined || arenaState.isRevealed || arenaState.isRevealing || (timeLeft !== null && timeLeft <= 0);
 
   const handleNodeClick = (boxId: string) => {
-    if (isInputLocked) return;
-
-    if (!selectedTeamId) {
-      showToast("Select your team first from the top right!");
-      setInvalidDropBoxId(boxId);
-      setTimeout(() => setInvalidDropBoxId(null), 500);
-      return;
-    }
-
+    // 1. Is the timer over or state revealed?
     if (timeLeft !== null && timeLeft <= 0) {
       showToast("Selection period has ended.");
       setInvalidDropBoxId(boxId);
@@ -145,6 +137,15 @@ export default function SelectionZone() {
       return;
     }
 
+    // 2. Is the user valid?
+    if (!selectedTeamId) {
+      showToast("Select your team first from the top right!");
+      setInvalidDropBoxId(boxId);
+      setTimeout(() => setInvalidDropBoxId(null), 500);
+      return;
+    }
+
+    // 3. Has the team already selected?
     const hasSelected = selections.some((s) => s.teamId === selectedTeamId);
     if (hasSelected) {
       showToast("Your team has already secured an Energy Node.");
@@ -153,6 +154,7 @@ export default function SelectionZone() {
       return;
     }
 
+    // 4. Is the box already taken?
     const isBoxSelected = selections.some((s) => s.selectedBoxId === boxId);
     if (isBoxSelected) {
       showToast("This Energy Node has already been secured by another team.");
@@ -161,6 +163,7 @@ export default function SelectionZone() {
       return;
     }
 
+    // If passed all, open modal
     setSelectedActionBoxId(boxId);
   };
 
@@ -369,7 +372,7 @@ export default function SelectionZone() {
                       ? { repeat: Infinity, duration: 0.1 } 
                       : { delay: idx * 0.05, type: "spring" }
                 }
-                onClick={() => !isLocked && !isInputLocked && handleNodeClick(box.id)}
+                onClick={() => handleNodeClick(box.id)}
                 style={
                   !arenaState.isRevealed && !isMyLock && box.color && !arenaState.isRevealing
                     ? { borderColor: box.color, boxShadow: `0 0 20px ${box.color}20` }
