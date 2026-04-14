@@ -951,7 +951,7 @@ export default function ControlRoom() {
     try {
       const finalCard = {
         ...newCard,
-        description: getAutoDescription(
+        description: newCard.description?.trim() || getAutoDescription(
           newCard.effect as string,
           newCard.value as number | null,
           newCard.durationType as string,
@@ -2325,6 +2325,16 @@ export default function ControlRoom() {
                 className="flex-1 min-w-[140px] bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white font-bold"
                 required
               />
+              
+              <input
+                type="text"
+                placeholder="Custom Description (optional)..."
+                value={newCard.description || ""}
+                onChange={(e) =>
+                  setNewCard({ ...newCard, description: e.target.value })
+                }
+                className="flex-1 min-w-[200px] w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-xs"
+              />
 
               <div className="flex gap-2 flex-wrap flex-1 min-w-[280px]">
                 <select
@@ -2660,7 +2670,7 @@ export default function ControlRoom() {
                         {newCard.name || "Undefined Card"}
                       </h3>
                       <p className="text-xs text-zinc-400 mb-6 flex-1 font-medium">
-                        {autoDesc}
+                        {newCard.description?.trim() || autoDesc}
                       </p>
                       <div className="pt-3 border-t border-zinc-800">
                         <div className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">

@@ -238,10 +238,10 @@ export default function CardsLibrary() {
                       </div>
 
                       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                        <h3 className="text-lg sm:text-xl font-black text-white mb-2 sm:mb-3 uppercase tracking-tight leading-tight truncate shrink-0">
+                        <h3 className="text-lg sm:text-xl font-black text-white mb-2 sm:mb-3 uppercase tracking-tight leading-tight shrink-0">
                           {card.name}
                         </h3>
-                        <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-8 flex-1 leading-relaxed font-medium line-clamp-4">
+                        <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-8 flex-1 leading-relaxed font-medium">
                           {card.description}
                         </p>
                       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   collection,
@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ArenaBox, ArenaSelection, ArenaState, Team, Card } from "@/types";
-import { Lock, ShieldAlert, Cpu, Orbit, GripHorizontal } from "lucide-react";
+import { Lock, ShieldAlert, Cpu, Orbit } from "lucide-react";
 
 export default function SelectionZone() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -23,9 +23,31 @@ export default function SelectionZone() {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // Drag & Drop State
-  const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null);
-  const [hoveredBoxId, setHoveredBoxId] = useState<string | null>(null);
+  // Audio State
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isTickingPlayedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      audioRef.current = new Audio("/sounds/ticking.mp3");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (timeLeft === 10 && !isTickingPlayedRef.current) {
+      isTickingPlayedRef.current = true;
+      audioRef.current?.play().catch((e) => console.log("Audio play blocked by browser:", e));
+    } else if (timeLeft === null || timeLeft > 10) {
+      isTickingPlayedRef.current = false;
+      if (audioRef.current && timeLeft === null) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+  }, [timeLeft]);
+
+  // Tap-to-Lock State
+  const [selectedActionBoxId, setSelectedActionBoxId] = useState<string | null>(null);
   const [invalidDropBoxId, setInvalidDropBoxId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -99,49 +121,15 @@ export default function SelectionZone() {
   const mySelection = selections.find((s) => s.teamId === selectedTeamId);
   const isInputLocked = mySelection !== undefined || arenaState.isRevealed || arenaState.isRevealing || (timeLeft !== null && timeLeft <= 0);
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    if (isInputLocked || !selectedTeamId) {
-      e.preventDefault();
+  const handleNodeClick = (boxId: string) => {
+    if (isInputLocked) return;
+
+    if (!selectedTeamId) {
+      showToast("Select your team first from the top right!");
+      setInvalidDropBoxId(boxId);
+      setTimeout(() => setInvalidDropBoxId(null), 500);
       return;
     }
-    e.dataTransfer.setData("text/plain", selectedTeamId);
-    e.dataTransfer.effectAllowed = "copyMove";
-    // We can't safely use setDraggedTeamId if we don't want state updates interfering with drag visually.
-    // But it's fine for simple flags.
-    setDraggedTeamId(selectedTeamId);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedTeamId(null);
-    setHoveredBoxId(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, boxId: string) => {
-    // Check if drop is realistically allowed on UI side first to set dropEffect
-    const isBoxSelected = selections.some((s) => s.selectedBoxId === boxId);
-    if (!isBoxSelected && !isInputLocked) {
-      e.preventDefault(); // Necessary to allow dropping
-      e.dataTransfer.dropEffect = "copy";
-      if (hoveredBoxId !== boxId) {
-        setHoveredBoxId(boxId);
-      }
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>, boxId: string) => {
-    if (hoveredBoxId === boxId) {
-      setHoveredBoxId(null);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, boxId: string) => {
-    e.preventDefault();
-    setHoveredBoxId(null);
-    setDraggedTeamId(null);
-
-    const teamId = e.dataTransfer.getData("text/plain");
-
-    if (!teamId) return;
 
     if (timeLeft !== null && timeLeft <= 0) {
       showToast("Selection period has ended.");
@@ -157,13 +145,7 @@ export default function SelectionZone() {
       return;
     }
 
-    if (teamId !== selectedTeamId) {
-       showToast("Identity mismatch. Please reload.");
-       return;
-    }
-
-    // UI-side optimistic validation: Has this team already selected?
-    const hasSelected = selections.some((s) => s.teamId === teamId);
+    const hasSelected = selections.some((s) => s.teamId === selectedTeamId);
     if (hasSelected) {
       showToast("Your team has already secured an Energy Node.");
       setInvalidDropBoxId(boxId);
@@ -171,7 +153,6 @@ export default function SelectionZone() {
       return;
     }
 
-    // UI-side optimistic validation: Is this box already selected?
     const isBoxSelected = selections.some((s) => s.selectedBoxId === boxId);
     if (isBoxSelected) {
       showToast("This Energy Node has already been secured by another team.");
@@ -179,6 +160,15 @@ export default function SelectionZone() {
       setTimeout(() => setInvalidDropBoxId(null), 500);
       return;
     }
+
+    setSelectedActionBoxId(boxId);
+  };
+
+  const handleConfirmLock = async () => {
+    const boxId = selectedActionBoxId;
+    const teamId = selectedTeamId;
+    setSelectedActionBoxId(null);
+    if (!boxId || !teamId) return;
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -210,7 +200,7 @@ export default function SelectionZone() {
         });
       });
 
-      showToast("Pod Locked Successfully ✅");
+      showToast("Node Locked Successfully ✅");
     } catch (err: any) {
       console.error("Lock failed:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -318,22 +308,19 @@ export default function SelectionZone() {
                   className={`w-full p-3 rounded-lg border ${
                     mySelection
                       ? "bg-[#39ff14]/10 border-[#39ff14]/50 shadow-[0_0_15px_rgba(57,255,20,0.2)]"
-                      : "bg-cyan-500/10 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)] cursor-grab active:cursor-grabbing hover:bg-cyan-500/20"
+                      : "bg-cyan-500/10 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
                   } transition-colors overflow-hidden flex items-center justify-between`}
-                  draggable={!mySelection && !isInputLocked}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
                 >
                   <div>
                     <div className="text-[#39ff14] font-black uppercase text-sm truncate max-w-[160px]">
                       {selectedTeamData.teamName}
                     </div>
                     <div className={`text-[10px] uppercase font-bold tracking-widest mt-1 ${mySelection ? 'text-zinc-400' : (timeLeft !== null && timeLeft <= 0) ? 'text-red-500' : 'text-cyan-400'}`}>
-                      {mySelection ? "STATUS: LOCKED 🔒" : (timeLeft !== null && timeLeft <= 0) ? "SELECTION CLOSED" : "DRAG ME TO A NODE"}
+                      {mySelection ? "STATUS: NODE SECURED 🔒" : (timeLeft !== null && timeLeft <= 0) ? "SELECTION CLOSED" : "TAP A NODE TO SECURE IT"}
                     </div>
                   </div>
                   {!mySelection && !isInputLocked && (
-                    <GripHorizontal className="w-5 h-5 text-cyan-400/50" />
+                    <Orbit className="w-5 h-5 text-cyan-400/50 animate-[spin_4s_linear_infinite]" />
                   )}
                   {mySelection && (
                     <Lock className="w-5 h-5 text-[#39ff14]/70" />
@@ -357,7 +344,6 @@ export default function SelectionZone() {
             const isMyLock = thisSelection?.teamId === selectedTeamId;
             const lockedTeam = teams.find((t) => t.id === thisSelection?.teamId);
             
-            const isHovered = hoveredBoxId === box.id;
             const isInvalidDrop = invalidDropBoxId === box.id;
 
             // Revealed state mappings
@@ -374,7 +360,7 @@ export default function SelectionZone() {
                     ? { x: [-10, 10, -10, 10, 0], scale: 1 } 
                     : arenaState.isRevealing 
                       ? { x: [-5, 5, -5, 5, -2, 2, 0], y: [5, -5, -5, 5, 2, -2, 0], scale: 1.05 } 
-                      : { opacity: 1, scale: isHovered && !isLocked ? 1.05 : 1 }
+                      : { opacity: 1, scale: 1 }
                 }
                 transition={
                   isInvalidDrop 
@@ -383,53 +369,51 @@ export default function SelectionZone() {
                       ? { repeat: Infinity, duration: 0.1 } 
                       : { delay: idx * 0.05, type: "spring" }
                 }
-                onDragOver={(e) => handleDragOver(e, box.id)}
-                onDragLeave={(e) => handleDragLeave(e, box.id)}
-                onDrop={(e) => handleDrop(e, box.id)}
+                onClick={() => !isLocked && !isInputLocked && handleNodeClick(box.id)}
                 style={
-                  !arenaState.isRevealed && !isMyLock && !isHovered && box.color && !arenaState.isRevealing
+                  !arenaState.isRevealed && !isMyLock && box.color && !arenaState.isRevealing
                     ? { borderColor: box.color, boxShadow: `0 0 20px ${box.color}20` }
                     : {}
                 }
-                className={`
-                  relative aspect-square rounded-2xl flex flex-col items-center justify-center p-4 transition-colors duration-300 overflow-hidden
+                className={`group
+                  relative aspect-square rounded-2xl flex flex-col items-center justify-center p-4 transition-all duration-300 overflow-hidden
                   ${arenaState.isRevealing
                     ? "bg-purple-900/20 shadow-[0_0_40px_rgba(168,85,247,0.6)] border-2 border-purple-500/80"
                     : arenaState.isRevealed 
                     ? "bg-zinc-900 border-2 border-zinc-700"
                     : isLocked 
                       ? isMyLock 
-                        ? "bg-[#39ff14]/5 border-2 border-[#39ff14]/50 shadow-[0_0_30px_rgba(57,255,20,0.2)]" 
-                        : "bg-black/80 border-2 border-zinc-800" 
-                      : isHovered
-                        ? "bg-cyan-500/20 border-2 border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.6)]"
-                        : "bg-zinc-900/50 border border-zinc-800 border-dashed"
+                        ? "bg-[#39ff14]/5 border-2 border-[#39ff14]/50 shadow-[0_0_30px_rgba(57,255,20,0.2)] cursor-default" 
+                        : "bg-red-900/20 border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.1)] cursor-not-allowed opacity-80" 
+                      : !isInputLocked
+                        ? "bg-zinc-900/50 border border-zinc-800 hover:border-cyan-400 hover:bg-cyan-500/10 hover:scale-[1.02] cursor-pointer hover:shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                        : "bg-zinc-900/50 border border-zinc-800 border-dashed cursor-not-allowed"
                   }
                 `}
               >
                 {/* ID Tag */}
-                <span className="absolute top-2 sm:top-3 left-2 sm:left-3 text-[10px] font-bold tracking-widest opacity-40">
+                <span className="absolute top-2 sm:top-3 left-2 sm:left-3 text-[10px] font-bold tracking-widest opacity-40 group-hover:opacity-100 transition-opacity">
                   NODE-{idx + 1}
                 </span>
 
                 {!arenaState.isRevealed ? (
                   <>
                     <Cpu 
-                      className={`w-8 h-8 sm:w-12 sm:h-12 mb-2 sm:mb-4 transition-all duration-500 ${arenaState.isRevealing ? 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,1)] animate-pulse' : isMyLock ? 'text-[#39ff14] animate-pulse drop-shadow-[0_0_10px_rgba(57,255,20,0.8)]' : isHovered ? 'text-cyan-300 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)] scale-110' : 'opacity-70'}`} 
-                      style={!isMyLock && !isHovered && !arenaState.isRevealing && box.color ? { color: box.color, filter: `drop-shadow(0 0 10px ${box.color})` } : {}}
+                      className={`w-8 h-8 sm:w-12 sm:h-12 mb-2 sm:mb-4 transition-all duration-500 ${arenaState.isRevealing ? 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,1)] animate-pulse' : isMyLock ? 'text-[#39ff14] animate-pulse drop-shadow-[0_0_10px_rgba(57,255,20,0.8)]' : isLocked ? 'text-red-500/50' : 'opacity-70 group-hover:text-cyan-300 group-hover:drop-shadow-[0_0_15px_rgba(6,182,212,0.8)] group-hover:scale-110'}`} 
+                      style={!isMyLock && !arenaState.isRevealing && box.color && !isLocked ? { color: box.color, filter: `drop-shadow(0 0 10px ${box.color})` } : {}}
                     />
                     
                     <div className="text-[10px] sm:text-xs uppercase tracking-widest text-center font-bold px-2">
                       {isLocked ? (
                         <div className="flex flex-col items-center gap-1">
-                          <Lock className="w-3 h-3 sm:w-4 sm:h-4 mb-0.5" />
-                          <span className={isMyLock ? 'text-[#39ff14]' : 'text-zinc-500'}>
+                          <Lock className={`w-3 h-3 sm:w-4 sm:h-4 mb-0.5 ${isMyLock ? 'text-[#39ff14]' : 'text-red-500'}`} />
+                          <span className={isMyLock ? 'text-[#39ff14]' : 'text-red-500'}>
                             LOCKED 🔒
                           </span>
                           {lockedTeam && <span className="text-[10px] text-white mt-1 border-t border-zinc-700 pt-1 w-full truncate">{lockedTeam.teamName}</span>}
                         </div>
-                      ) : isHovered ? (
-                        <span className="text-cyan-300">DROP HERE / /</span>
+                      ) : !isInputLocked ? (
+                        <span className="font-black tracking-[0.2em] group-hover:text-cyan-300 transition-colors" style={box.color ? { color: box.color } : {}}>AVAILABLE</span>
                       ) : (
                         <span className="font-black tracking-[0.2em]" style={box.color ? { color: box.color } : {}}>ENERGY NODE</span>
                       )}
@@ -471,6 +455,55 @@ export default function SelectionZone() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {selectedActionBoxId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-cyan-500/50 shadow-[0_0_40px_rgba(6,182,212,0.3)] rounded-2xl p-6 max-w-sm w-full relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-[linear-gradient(currentColor_1px,transparent_1px),linear-gradient(90deg,currentColor_1px,transparent_1px)] bg-[size:20px_20px] opacity-[0.05] text-cyan-500 pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center mb-4 border border-cyan-500/50 animate-[pulse_2s_ease-in-out_infinite]">
+                  <Lock className="w-8 h-8 text-cyan-400" />
+                </div>
+                
+                <h3 className="text-xl font-black text-white uppercase tracking-widest mb-2">
+                  Secure Energy Node?
+                </h3>
+                <p className="text-sm text-zinc-400 mb-8 max-w-[250px]">
+                  This action cannot be undone. Your team will be permanently locked to this Node.
+                </p>
+
+                <div className="flex w-full gap-3">
+                  <button
+                    onClick={() => setSelectedActionBoxId(null)}
+                    className="flex-1 px-4 py-3 rounded-lg border border-zinc-700 bg-black text-zinc-300 font-bold tracking-widest text-xs uppercase hover:bg-zinc-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmLock}
+                    className="flex-1 px-4 py-3 rounded-lg border border-cyan-500 bg-cyan-500/20 text-cyan-400 font-black tracking-widest text-xs uppercase hover:bg-cyan-500 hover:text-white transition-all hover:shadow-[0_0_20px_rgba(6,182,212,0.6)]"
+                  >
+                    Confirm Lock
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

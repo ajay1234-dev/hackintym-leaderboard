@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection,
@@ -48,6 +48,16 @@ export default function ArenaAdmin() {
   const [newPodCard1, setNewPodCard1] = useState<string>("");
   const [newPodCard2, setNewPodCard2] = useState<string>("");
 
+  // Audio State
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isTickingPlayedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      audioRef.current = new Audio("/sounds/ticking.mp3");
+    }
+  }, []);
+
   // Route Protection
   useEffect(() => {
     const isAuth = typeof window !== 'undefined' ? sessionStorage.getItem('adminAuth') : null;
@@ -89,14 +99,28 @@ export default function ArenaAdmin() {
 
   // Background loop for deadline timeout
   useEffect(() => {
-    if (!arenaState.selectionDeadline || arenaState.isRevealed || arenaState.isRevealing || isProcessing) return;
+    if (!arenaState.selectionDeadline || arenaState.isRevealed || arenaState.isRevealing || isProcessing) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      isTickingPlayedRef.current = false;
+      return;
+    }
 
     const interval = setInterval(() => {
-      if (Date.now() >= arenaState.selectionDeadline!) {
+      const remainingSeconds = Math.max(0, Math.floor((arenaState.selectionDeadline! - Date.now()) / 1000));
+      
+      if (remainingSeconds === 10 && !isTickingPlayedRef.current) {
+        isTickingPlayedRef.current = true;
+        audioRef.current?.play().catch(e => console.log("Audio play blocked by browser:", e));
+      }
+
+      if (remainingSeconds === 0) {
         console.log("Deadline reached! Auto-triggering reveal sequence...");
         triggerRevealProcess();
       }
-    }, 1000);
+    }, 500);
 
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
