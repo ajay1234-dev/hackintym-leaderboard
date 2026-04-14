@@ -172,35 +172,22 @@ export default function SelectionZone() {
     }
 
     try {
-      // Safe write pattern using transaction to prevent double booking for the same team AND the same box
+      // Safe write pattern using transaction to prevent double booking for the same team
       const selectionRef = doc(db, "teamSelections", teamId);
-      const lockRef = doc(db, "teamSelections", `lock_${boxId}`);
       
       await runTransaction(db, async (transaction) => {
         // Read locks
         const teamSelectionSnap = await transaction.get(selectionRef);
-        const lockSnap = await transaction.get(lockRef);
         
         if (teamSelectionSnap.exists()) {
           throw new Error("ALREADY_SELECTED");
         }
-        if (lockSnap.exists()) {
-          throw new Error("BOX_TAKEN");
-        }
-        
-        // Write locks
-        transaction.set(lockRef, { 
-          type: "lock", 
-          lockedBy: teamId, 
-          lockedAt: Date.now() 
-        });
         
         transaction.set(selectionRef, {
           id: teamId,
           teamId: teamId,
           selectedBoxId: boxId,
-          isLocked: true,
-          lockedAt: Date.now()
+          isLocked: true
         });
       });
       // Snap animation handles via standard f-motion on presence
