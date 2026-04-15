@@ -13,6 +13,11 @@ import {
   arrayUnion,
   arrayRemove,
   setDoc,
+  writeBatch,
+  where,
+  orderBy,
+  limit,
+  getDocs,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
@@ -23,6 +28,8 @@ import {
   Bounty,
   PendingCardSubmission,
   CardWindowState,
+  ActiveEffect,
+  UtilityType,
 } from "@/types";
 import { syncSession } from "@/app/actions";
 import { motion, AnimatePresence } from "framer-motion";
@@ -92,6 +99,7 @@ export default function ControlRoom() {
     type: "BOOST",
     description: "",
     effect: "add_points",
+    utilityType: "DATA_PING",
     value: null,
     durationType: "INSTANT",
     durationValue: null,
@@ -468,16 +476,23 @@ export default function ControlRoom() {
   const applyScoreToTeam = (
     team: Team,
     draft: Record<string, string | number>,
-    mult: number
+    mult: number,
+    sourceEffects: ActiveEffect[] = []
   ) => {
     let totalDelta = 0;
     const updates: Partial<Team> = {};
     const messageParts: string[] = [];
 
+    const hasOverride = team.activeEffects?.find(
+      (e) => e.effect === "override_freeze" && (!e.expiresAt || e.expiresAt > Date.now())
+    );
+
     const activeFreeze = team.activeEffects?.find(
       (e) => e.effect === "freeze" && (!e.expiresAt || e.expiresAt > Date.now())
     );
-    if (activeFreeze) {
+    
+    // Global/Local Freeze is ignored if team has Override active
+    if (activeFreeze && !hasOverride) {
       messageParts.push("Blocked by Freeze!");
       return { totalDelta: 0, updates: {}, messageParts };
     }
@@ -485,6 +500,11 @@ export default function ControlRoom() {
     const activeShield = team.activeEffects?.find(
       (e) => e.effect === "block" && (!e.expiresAt || e.expiresAt > Date.now())
     );
+
+    const hasPrecisionLock = sourceEffects.some(
+      (e) => e.effect === "precision_lock" && (!e.expiresAt || e.expiresAt > Date.now())
+    );
+
     const pendingMultiplier = team.activeEffects?.find(
       (e) => e.isPending && e.effect === "multiply_score"
     );
@@ -504,12 +524,16 @@ export default function ControlRoom() {
           let fieldName =
             key === "bonusPoints" ? "Bonus" : `R${key.replace("review", "")}`;
 
-          if (delta < 0 && activeShield) {
+          // Shield blocks penalty, unless attacker has Precision Lock
+          if (delta < 0 && activeShield && !hasPrecisionLock) {
             delta = 0;
             messageParts.push(`Penalty blocked by Shield (${fieldName})`);
             updates[key] = Number(team[key]) || 0;
             if (activeShield.isPending) hasShieldUsed = true;
           } else {
+            if (delta < 0 && activeShield && hasPrecisionLock) {
+              messageParts.push(`Shield bypassed by Precision Lock!`);
+            }
             let activeMult = delta > 0 ? finalMult : mult;
             if (activeMult !== 1 && delta > 0) {
               delta = delta * activeMult;
@@ -1118,6 +1142,209 @@ export default function ControlRoom() {
     showToast(`Removed corrupted ghost ID from ${teamName}.`, "info");
   };
 
+  const applyUtilityCard = async (card: Card, team: Team, targetTeamId?: string) => {
+    const type = card.utilityType;
+    if (!type) {
+      showToast("Utility card missing specific type logic", "info");
+      return false;
+    }
+
+    const targetTeam = targetTeamId ? teams.find(t => t.id === targetTeamId) : null;
+
+    switch (type) {
+      case "DATA_PING": {
+        const topTeams = [...teams]
+          .sort((a, b) => {
+            const scoreA = (a.review1 || 0) + (a.review2 || 0) + (a.review3 || 0) + (a.bonusPoints || 0);
+            const scoreB = (b.review1 || 0) + (b.review2 || 0) + (b.review3 || 0) + (b.bonusPoints || 0);
+            return scoreB - scoreA;
+          })
+          .slice(0, 3);
+        
+        const message = topTeams.map((t, i) => `${i + 1}. ${t.teamName}`).join(", ");
+        showToast(`🛰️ TOP 3: ${message}`, "success");
+        return true;
+      }
+
+      case "PRECISION_LOCK": {
+        const expiresAt = Date.now() + 60 * 1000;
+        await updateDoc(doc(db, "teams", team.id), {
+          activeEffects: arrayUnion({
+            id: Math.random().toString(36).substring(2, 9),
+            effect: "precision_lock",
+            type: "UTILITY",
+            expiresAt,
+            isPending: false,
+            icon: "Target",
+            sourceCardId: card.id,
+            sourceTeamId: team.id
+          })
+        });
+        showToast("🎯 Precision Lock Active (60s). Bypassing shields!", "success");
+        return true;
+      }
+
+      case "ENERGY_REFRESH": {
+        const cooldowns = team.cardCooldowns || {};
+        const newCooldowns: Record<string, number> = {};
+        Object.entries(cooldowns).forEach(([id, ts]) => {
+          const remaining = ts - Date.now();
+          if (remaining > 0) {
+            newCooldowns[id] = Date.now() + (remaining / 2);
+          }
+        });
+        await updateDoc(doc(db, "teams", team.id), { cardCooldowns: newCooldowns });
+        showToast("⚡ Energy Refreshed! All cooldowns reduced by 50%.", "success");
+        return true;
+      }
+
+      case "REVEAL_PULSE": {
+        if (!targetTeam) return false;
+        const effects = targetTeam.activeEffects?.map(e => e.effect).join(", ") || "No active effects";
+        showToast(`👁️ Pulse Reveal (${targetTeam.teamName}): ${effects}`, "info");
+        return true;
+      }
+
+      case "COOLDOWN_RESET": {
+        // Find the card with the highest cooldown
+        const cooldowns = team.cardCooldowns || {};
+        const entries = Object.entries(cooldowns).sort((a, b) => b[1] - a[1]);
+        if (entries.length === 0 || entries[0][1] <= Date.now()) {
+          showToast("No active cooldowns to reset", "info");
+          return false;
+        }
+        const [idToReset] = entries[0];
+        const updated = { ...cooldowns };
+        delete updated[idToReset];
+        await updateDoc(doc(db, "teams", team.id), { cardCooldowns: updated });
+        showToast("🔄 Cooldown Reset successfully!", "success");
+        return true;
+      }
+
+      case "TARGET_SCANNER": {
+        const bestTarget = [...teams]
+          .filter(t => t.id !== team.id)
+          .filter(t => !t.activeEffects?.some(e => e.effect === "block" && (!e.expiresAt || e.expiresAt > Date.now())))
+          .sort((a, b) => {
+            const scoreA = (a.review1 || 0) + (a.review2 || 0) + (a.review3 || 0) + (a.bonusPoints || 0);
+            const scoreB = (b.review1 || 0) + (b.review2 || 0) + (b.review3 || 0) + (b.bonusPoints || 0);
+            return scoreB - scoreA;
+          })[0];
+        
+        if (bestTarget) {
+          showToast(`🧠 Scanner Suggestion: ${bestTarget.teamName} (Highest score, no shield)`, "info");
+        } else {
+          showToast("Scanner found no viable targets.", "info");
+        }
+        return true;
+      }
+
+      case "SYSTEM_OVERRIDE": {
+        const expiresAt = Date.now() + 30 * 1000;
+        await updateDoc(doc(db, "teams", team.id), {
+          activeEffects: arrayUnion({
+            id: Math.random().toString(36).substring(2, 9),
+            effect: "override_freeze",
+            type: "UTILITY",
+            expiresAt,
+            isPending: false,
+            icon: "Settings",
+            sourceCardId: card.id,
+            sourceTeamId: team.id
+          })
+        });
+        showToast("⚙️ System Override (30s). Immunity to Freeze!", "success");
+        return true;
+      }
+
+      case "LOCK_BREAKER": {
+        if (!targetTeam) return false;
+        const filtered = (targetTeam.activeEffects || []).filter(e => e.effect !== "block");
+        if (filtered.length === (targetTeam.activeEffects || []).length) {
+          showToast(`Target ${targetTeam.teamName} has no shield to break.`, "info");
+          return false;
+        }
+        await updateDoc(doc(db, "teams", targetTeam.id), { activeEffects: filtered });
+        showToast(`💥 Shield Shattered for ${targetTeam.teamName}!`, "success");
+        return true;
+      }
+
+      case "CHAOS_SWITCH": {
+        if (teams.length < 2) return false;
+        const t1 = teams[Math.floor(Math.random() * teams.length)];
+        let t2 = teams[Math.floor(Math.random() * teams.length)];
+        while (t1.id === t2.id) t2 = teams[Math.floor(Math.random() * teams.length)];
+
+        const score1 = (t1.review1 || 0) + (t1.review2 || 0) + (t1.review3 || 0) + (t1.bonusPoints || 0);
+        const score2 = (t2.review1 || 0) + (t2.review2 || 0) + (t2.review3 || 0) + (t2.bonusPoints || 0);
+
+        const batch = writeBatch(db);
+        // We swap total scores by adjusting bonusPoints relative to their base reviews
+        const base1 = (t1.review1 || 0) + (t1.review2 || 0) + (t1.review3 || 0);
+        const base2 = (t2.review1 || 0) + (t2.review2 || 0) + (t2.review3 || 0);
+        
+        batch.update(doc(db, "teams", t1.id), { bonusPoints: score2 - base1 });
+        batch.update(doc(db, "teams", t2.id), { bonusPoints: score1 - base2 });
+        
+        await batch.commit();
+        showToast(`🌀 Chaos Switch! ${t1.teamName} and ${t2.teamName} swapped positions!`, "info");
+        return true;
+      }
+
+      case "REALITY_REWRITE": {
+        if (!targetTeam) return false;
+        const q = query(
+          collection(db, "activityLogs"),
+          where("teamName", "==", targetTeam.teamName),
+          orderBy("timestamp", "desc"),
+          limit(5)
+        );
+        const snapshot = await getDocs(q);
+        const logs = snapshot.docs.map(d => d.data());
+        const lastScoreLog = logs.find(l => l.actionType === "score" || (l.actionType === "card" && l.points && l.points !== 0));
+
+        if (!lastScoreLog) {
+          showToast("No recent score history found for reality rewrite", "info");
+          return false;
+        }
+
+        const delta = lastScoreLog.points || 0;
+        await updateDoc(doc(db, "teams", targetTeam.id), {
+          bonusPoints: (Number(targetTeam.bonusPoints) || 0) - delta
+        });
+        showToast(`⌛ Reality Rewritten. ${targetTeam.teamName} score reverted by ${-delta} pts.`, "success");
+        return true;
+      }
+
+      case "ABSOLUTE_VISION": {
+        const expiresAt = Date.now() + 10 * 1000;
+        await updateDoc(doc(db, "teams", team.id), {
+          activeEffects: arrayUnion({
+            id: Math.random().toString(36).substring(2, 9),
+            effect: "vision",
+            type: "UTILITY",
+            expiresAt,
+            isPending: false,
+            icon: "Eye",
+            sourceCardId: card.id,
+            sourceTeamId: team.id
+          })
+        });
+        showToast("👁️ Absolute Vision (10s). Seeing through the grid...", "success");
+        return true;
+      }
+
+      case "PREDICTIVE_ENGINE": {
+        showToast("🧠 Prediction: A global phenomenon is approaching...", "info");
+        return true;
+      }
+
+      default:
+        showToast("Utility logic not implemented yet", "info");
+        return false;
+    }
+  };
+
   const handleUseCard = async (
     teamId: string,
     teamName: string,
@@ -1132,7 +1359,8 @@ export default function ControlRoom() {
     const requiresTarget =
       cardInfo.type === "ATTACK" ||
       cardInfo.effect === "deduct_points" ||
-      cardInfo.effect === "freeze";
+      cardInfo.effect === "freeze" ||
+      (cardInfo.effect === "utility" && ["REVEAL_PULSE", "LOCK_BREAKER", "REALITY_REWRITE"].includes(cardInfo.utilityType || ''));
 
     if (requiresTarget) {
       targetTeamId = cardTargets[`${teamId}_${cardId}_${index}`];
@@ -1166,7 +1394,12 @@ export default function ControlRoom() {
     console.log("Applying card:", cardInfo);
     if (targetTeamId) console.log("Target:", targetTeamId);
 
-    if (cardInfo.effect === "add_points") {
+    // ROUTE TO UTILITY ENGINE
+    if (cardInfo.effect === "utility") {
+      const success = await applyUtilityCard(cardInfo, team, targetTeamId);
+      if (!success) return;
+      usedInstantly = true;
+    } else if (cardInfo.effect === "add_points") {
       if (cardInfo.durationType === "INSTANT" && cardInfo.value) {
         // Apply via draft internally
         const draft = {
@@ -1176,7 +1409,8 @@ export default function ControlRoom() {
         const { totalDelta, updates, messageParts } = applyScoreToTeam(
           team,
           draft,
-          mult
+          mult,
+          team.activeEffects || []
         );
         executingTeamUpdates = { ...updates };
         usedInstantly = true;
@@ -1197,7 +1431,8 @@ export default function ControlRoom() {
         const { totalDelta, updates, messageParts } = applyScoreToTeam(
           targetTeamInstance,
           draft,
-          mult
+          mult,
+          team.activeEffects || []
         );
         targetTeamUpdates = { ...updates };
         usedInstantly = true;
@@ -2531,7 +2766,31 @@ export default function ControlRoom() {
                 <option value="block">Block</option>
                 <option value="freeze">Freeze</option>
                 <option value="extend_time">Extend Time</option>
+                <option value="utility">Utility Logic</option>
               </select>
+
+              {newCard.effect === "utility" && (
+                <select
+                  value={newCard.utilityType || "DATA_PING"}
+                  onChange={(e) =>
+                    setNewCard({ ...newCard, utilityType: e.target.value as any })
+                  }
+                  className="flex-1 min-w-[140px] bg-purple-900/20 border border-purple-500/50 rounded-lg px-2 py-2 uppercase tracking-widest text-[9px] font-black text-purple-300 animate-pulse"
+                >
+                  <option value="DATA_PING">Data Ping</option>
+                  <option value="PRECISION_LOCK">Precision Lock</option>
+                  <option value="ENERGY_REFRESH">Energy Refresh</option>
+                  <option value="REVEAL_PULSE">Reveal Pulse</option>
+                  <option value="COOLDOWN_RESET">Cooldown Reset</option>
+                  <option value="TARGET_SCANNER">Target Scanner</option>
+                  <option value="SYSTEM_OVERRIDE">System Override</option>
+                  <option value="LOCK_BREAKER">Lock Breaker</option>
+                  <option value="PREDICTIVE_ENGINE">Predictive Engine</option>
+                  <option value="CHAOS_SWITCH">Chaos Switch</option>
+                  <option value="REALITY_REWRITE">Reality Rewrite</option>
+                  <option value="ABSOLUTE_VISION">Absolute Vision</option>
+                </select>
+              )}
 
               <input
                 type="number"

@@ -35,6 +35,20 @@ export interface ActivityLog {
   timestamp: number;
 }
 
+export type UtilityType =
+  | "DATA_PING"
+  | "PRECISION_LOCK"
+  | "ENERGY_REFRESH"
+  | "REVEAL_PULSE"
+  | "COOLDOWN_RESET"
+  | "TARGET_SCANNER"
+  | "SYSTEM_OVERRIDE"
+  | "LOCK_BREAKER"
+  | "PREDICTIVE_ENGINE"
+  | "CHAOS_SWITCH"
+  | "REALITY_REWRITE"
+  | "ABSOLUTE_VISION";
+
 export interface Card {
   id: string;
   name: string;
@@ -48,7 +62,9 @@ export interface Card {
     | "block"
     | "freeze"
     | "extend_time"
+    | "utility"
     | string;
+  utilityType?: UtilityType;
   value: number | null;
   durationType: "INSTANT" | "NEXT_ACTION" | "TIMED" | string;
   durationValue: number | null;

@@ -53,6 +53,10 @@ const ActiveEffectBadge = ({
   if (effect.effect === "freeze") renderEmoji = "❄";
   else if (effect.effect === "block") renderEmoji = "🛡";
   else if (effect.effect === "multiply_score") renderEmoji = "⚡";
+  else if (effect.effect === "precision_lock") renderEmoji = "🎯";
+  else if (effect.effect === "vision") renderEmoji = "👁";
+  else if (effect.effect === "override_freeze") renderEmoji = "⚙";
+  else if (effect.effect === "predictive_engine") renderEmoji = "🧠";
 
   if (effect.expiresAt && timeLeft === 0) return null;
 
@@ -63,6 +67,14 @@ const ActiveEffectBadge = ({
     textToDisplay = "Shield";
   } else if (effect.effect === "freeze") {
     textToDisplay = "Freeze";
+  } else if (effect.effect === "precision_lock") {
+    textToDisplay = "Precision Lock";
+  } else if (effect.effect === "vision") {
+    textToDisplay = "Vision Mode";
+  } else if (effect.effect === "override_freeze") {
+    textToDisplay = "Override Active";
+  } else if (effect.effect === "predictive_engine") {
+    textToDisplay = "Predictive Active";
   }
 
   // Format 00:00 for timed countdowns

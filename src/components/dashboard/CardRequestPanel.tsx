@@ -61,7 +61,8 @@ export function CardRequestPanel({
   const requiresTarget = (card: Card) =>
     card.type === "ATTACK" ||
     card.effect === "deduct_points" ||
-    card.effect === "freeze";
+    card.effect === "freeze" ||
+    (card.effect === "utility" && ["REVEAL_PULSE", "LOCK_BREAKER", "REALITY_REWRITE"].includes(card.utilityType || ''));
 
   const handleOpenModal = (card: Card) => {
     if (!requestWindow.isOpen) return;
