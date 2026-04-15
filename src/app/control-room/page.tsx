@@ -2775,20 +2775,20 @@ export default function ControlRoom() {
                   onChange={(e) =>
                     setNewCard({ ...newCard, utilityType: e.target.value as any })
                   }
-                  className="flex-1 min-w-[140px] bg-purple-900/20 border border-purple-500/50 rounded-lg px-2 py-2 uppercase tracking-widest text-[9px] font-black text-purple-300 animate-pulse"
+                  className="flex-1 min-w-[140px] bg-purple-900 border border-purple-500/50 rounded-lg px-2 py-2 uppercase tracking-widest text-[10px] items-center font-black text-white hover:bg-purple-800 transition-colors"
                 >
-                  <option value="DATA_PING">Data Ping</option>
-                  <option value="PRECISION_LOCK">Precision Lock</option>
-                  <option value="ENERGY_REFRESH">Energy Refresh</option>
-                  <option value="REVEAL_PULSE">Reveal Pulse</option>
-                  <option value="COOLDOWN_RESET">Cooldown Reset</option>
-                  <option value="TARGET_SCANNER">Target Scanner</option>
-                  <option value="SYSTEM_OVERRIDE">System Override</option>
-                  <option value="LOCK_BREAKER">Lock Breaker</option>
-                  <option value="PREDICTIVE_ENGINE">Predictive Engine</option>
-                  <option value="CHAOS_SWITCH">Chaos Switch</option>
-                  <option value="REALITY_REWRITE">Reality Rewrite</option>
-                  <option value="ABSOLUTE_VISION">Absolute Vision</option>
+                  <option value="DATA_PING" className="bg-zinc-950 text-white">Data Ping</option>
+                  <option value="PRECISION_LOCK" className="bg-zinc-950 text-white">Precision Lock</option>
+                  <option value="ENERGY_REFRESH" className="bg-zinc-950 text-white">Energy Refresh</option>
+                  <option value="REVEAL_PULSE" className="bg-zinc-950 text-white">Reveal Pulse</option>
+                  <option value="COOLDOWN_RESET" className="bg-zinc-950 text-white">Cooldown Reset</option>
+                  <option value="TARGET_SCANNER" className="bg-zinc-950 text-white">Target Scanner</option>
+                  <option value="SYSTEM_OVERRIDE" className="bg-zinc-950 text-white">System Override</option>
+                  <option value="LOCK_BREAKER" className="bg-zinc-950 text-white">Lock Breaker</option>
+                  <option value="PREDICTIVE_ENGINE" className="bg-zinc-950 text-white">Predictive Engine</option>
+                  <option value="CHAOS_SWITCH" className="bg-zinc-950 text-white">Chaos Switch</option>
+                  <option value="REALITY_REWRITE" className="bg-zinc-950 text-white">Reality Rewrite</option>
+                  <option value="ABSOLUTE_VISION" className="bg-zinc-950 text-white">Absolute Vision</option>
                 </select>
               )}
 
