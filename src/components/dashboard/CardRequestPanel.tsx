@@ -452,7 +452,7 @@ export function CardRequestPanel({
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.85, y: 30, opacity: 0 }}
               transition={{ type: "spring", damping: 18, stiffness: 300 }}
-              className="relative w-full max-w-sm bg-zinc-950 border border-cyan-500/40 rounded-2xl p-6 shadow-[0_0_60px_rgba(6,182,212,0.2)] overflow-hidden"
+              className="relative w-full max-w-sm bg-zinc-950 border border-cyan-500/40 rounded-2xl p-6 shadow-[0_0_60px_rgba(6,182,212,0.2)] max-h-[90vh] overflow-y-auto scrollbar-hide"
             >
               {/* Grid bg */}
               <div className="absolute inset-0 bg-[linear-gradient(currentColor_1px,transparent_1px),linear-gradient(90deg,currentColor_1px,transparent_1px)] bg-[size:24px_24px] opacity-[0.03] text-cyan-500 pointer-events-none" />

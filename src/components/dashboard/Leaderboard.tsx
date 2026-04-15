@@ -485,7 +485,7 @@ function LeaderboardRow({
       </div>
 
       {/* Active Effects (New Feature) */}
-      <div className="col-span-2 sm:col-span-4 md:col-span-4 flex flex-wrap items-center gap-1 sm:gap-1.5 overflow-hidden text-left border-l border-zinc-800/50 pl-2">
+      <div className="col-span-2 sm:col-span-4 md:col-span-4 flex flex-wrap items-center gap-1 sm:gap-1.5 text-left border-l border-zinc-800/50 pl-2">
         <AnimatePresence>
           {(team.activeEffects || []).map((effect) => (
             <ActiveEffectBadge

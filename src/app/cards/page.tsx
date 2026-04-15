@@ -203,7 +203,7 @@ export default function CardsLibrary() {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3, delay: i * 0.05 }}
                     key={card.id}
-                    className={`w-full h-auto aspect-[3/4] flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative overflow-hidden group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default ${borderClass} ${cardGlowEffect}`}
+                    className={`w-full min-h-[460px] flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default ${borderClass} ${cardGlowEffect}`}
                   >
                     {/* Background Glow */}
                     <div
@@ -215,7 +215,7 @@ export default function CardsLibrary() {
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out z-20 pointer-events-none"></div>
                     )}
 
-                    <div className="flex flex-col h-full relative z-10 w-full overflow-hidden">
+                    <div className="flex flex-col h-full relative z-10 w-full">
                       <div className="flex items-start justify-between mb-4 sm:mb-6 shrink-0">
                         <div
                           className={`w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-110 transition-transform duration-300 shrink-0 flex items-start justify-start ${
@@ -237,11 +237,11 @@ export default function CardsLibrary() {
                         </span>
                       </div>
 
-                      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                      <div className="flex-1 flex flex-col">
                         <h3 className="text-lg sm:text-xl font-black text-white mb-2 sm:mb-3 uppercase tracking-tight leading-tight shrink-0">
                           {card.name}
                         </h3>
-                        <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-8 leading-relaxed font-medium break-words px-1">
+                        <p className="text-xs sm:text-sm text-zinc-400 mb-6 leading-relaxed font-medium break-words px-1">
                           {card.description}
                         </p>
                       </div>

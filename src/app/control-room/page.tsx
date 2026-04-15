@@ -3012,7 +3012,7 @@ export default function ControlRoom() {
 
                 return (
                   <div
-                    className={`glass-panel p-5 rounded-3xl border relative overflow-hidden transition-all duration-300 ${borderClass}`}
+                    className={`glass-panel p-5 rounded-3xl border relative transition-all duration-300 ${borderClass}`}
                   >
                     <div
                       className={`absolute -top-12 -right-12 w-32 h-32 blur-[50px] opacity-30 ${glowClass}`}
