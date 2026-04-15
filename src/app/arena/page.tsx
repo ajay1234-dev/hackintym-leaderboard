@@ -13,6 +13,8 @@ import {
 import { db } from "@/lib/firebase";
 import { ArenaBox, ArenaSelection, ArenaState, Team, Card } from "@/types";
 import { Lock, ShieldAlert, Cpu, Orbit } from "lucide-react";
+import { useCardRequests } from "@/hooks/useCardRequests";
+import { CardRequestPanel } from "@/components/dashboard/CardRequestPanel";
 
 export default function SelectionZone() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -251,6 +253,16 @@ export default function SelectionZone() {
   };
 
   const selectedTeamData = teams.find(t => t.id === selectedTeamId);
+
+  // Card Request System
+  const {
+    cardRequests,
+    requestWindow,
+    timeRemaining: cardTimeRemaining,
+    getTeamRequests,
+    getCardRequestStatus,
+    submitRequest,
+  } = useCardRequests({ teams, cards });
 
   return (
     <main className="min-h-screen bg-black text-cyan-400 font-mono flex flex-col items-center p-4 sm:p-8 relative overflow-hidden">
@@ -533,6 +545,23 @@ export default function SelectionZone() {
           </div>
         )}
       </div>
+
+      {/* 🎴 Card Request Panel — Only for verified teams */}
+      {isVerified && selectedTeamData && (
+        <div className="z-10 w-full max-w-6xl">
+          <div className="border-t border-zinc-800/60 my-8" />
+          <CardRequestPanel
+            team={selectedTeamData}
+            allTeams={teams}
+            cards={cards}
+            requestWindow={requestWindow}
+            timeRemaining={cardTimeRemaining}
+            teamRequests={getTeamRequests(selectedTeamId)}
+            getCardRequestStatus={getCardRequestStatus}
+            onSubmitRequest={submitRequest}
+          />
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       <AnimatePresence>

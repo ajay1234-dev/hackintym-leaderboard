@@ -53,7 +53,9 @@ import {
 } from "@/lib/effectEngine";
 import { playResolveSound } from "@/lib/soundManager";
 import { useCardSubmission } from "@/hooks/useCardSubmission";
+import { useCardRequests, CardRequest } from "@/hooks/useCardRequests";
 import { PendingCardsPanel } from "@/components/dashboard/PendingCardsPanel";
+import { CardRequestsAdminPanel } from "@/components/dashboard/CardRequestsAdminPanel";
 
 export default function ControlRoom() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -170,7 +172,7 @@ export default function ControlRoom() {
     }, 3000);
   };
 
-  // Card Submission System
+  // Card Submission System (legacy)
   const {
     pendingSubmissions,
     cardWindow,
@@ -181,6 +183,17 @@ export default function ControlRoom() {
     closeCardWindow,
     clearAllSubmissions,
   } = useCardSubmission({ teams, cards });
+
+  // Card Request System (new digital flow)
+  const {
+    cardRequests,
+    requestWindow,
+    timeRemaining: requestTimeRemaining,
+    approveRequest,
+    rejectRequest,
+    openWindow: openRequestWindow,
+    closeWindow: closeRequestWindow,
+  } = useCardRequests({ teams, cards });
 
   // Execute a pending card submission
   const executePendingCard = async (submission: PendingCardSubmission) => {
@@ -250,7 +263,7 @@ export default function ControlRoom() {
     }
   };
 
-  // Handle open card window
+  // Handle open card window (legacy)
   const handleOpenCardWindow = async (duration: number) => {
     try {
       await setDoc(doc(db, "globalState", "cardWindow"), {
@@ -265,7 +278,7 @@ export default function ControlRoom() {
     }
   };
 
-  // Handle close card window
+  // Handle close card window (legacy)
   const handleCloseCardWindow = async () => {
     try {
       await setDoc(doc(db, "globalState", "cardWindow"), {
@@ -280,7 +293,7 @@ export default function ControlRoom() {
     }
   };
 
-  // Handle clear all submissions
+  // Handle clear all submissions (legacy)
   const handleClearAllSubmissions = async () => {
     if (!confirm("Clear all pending card submissions?")) {
       return;
@@ -292,6 +305,75 @@ export default function ControlRoom() {
     } catch (error) {
       console.error("Error clearing submissions:", error);
       showToast("Failed to clear submissions", "info");
+    }
+  };
+
+  // APPROVE card request — execute the card effect, then mark approved
+  const handleApproveCardRequest = async (request: CardRequest) => {
+    const card = cards.find((c) => c.id === request.cardId);
+    const team = teams.find((t) => t.id === request.teamId);
+    const targetTeam = request.targetTeamId
+      ? teams.find((t) => t.id === request.targetTeamId)
+      : null;
+
+    if (!card || !team) {
+      showToast("Invalid card or team in request", "info");
+      return;
+    }
+
+    try {
+      // Set the target in cardTargets so handleUseCard can pick it up for ATTACK cards
+      if (targetTeam) {
+        setCardTargets((prev) => ({
+          ...prev,
+          [`${team.id}_${card.id}_0`]: targetTeam.id,
+        }));
+      }
+
+      // Short delay to ensure state update propagates
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Execute the card effect using existing logic
+      await handleUseCard(team.id, team.teamName, card.id, 0);
+
+      // Mark request as approved
+      await approveRequest(request.id);
+
+      // Trigger toast notification for participant feedback
+      showToast(`✅ ${team.teamName}'s ${card.name} has been activated!`, "success");
+    } catch (error) {
+      console.error("Error approving card request:", error);
+      showToast("Failed to approve card request", "info");
+    }
+  };
+
+  // REJECT card request — just update status
+  const handleRejectCardRequest = async (requestId: string) => {
+    const result = await rejectRequest(requestId);
+    if (result.success) {
+      showToast("Card request rejected", "info");
+    } else {
+      showToast("Failed to reject request", "info");
+    }
+  };
+
+  // Open card request window
+  const handleOpenRequestWindow = async (seconds: number) => {
+    const result = await openRequestWindow(seconds);
+    if (result.success) {
+      showToast(`Card request window opened for ${Math.round(seconds / 60)} min`, "success");
+    } else {
+      showToast("Failed to open window", "info");
+    }
+  };
+
+  // Close card request window
+  const handleCloseRequestWindow = async () => {
+    const result = await closeRequestWindow();
+    if (result.success) {
+      showToast("Card request window closed", "info");
+    } else {
+      showToast("Failed to close window", "info");
     }
   };
 
@@ -413,6 +495,7 @@ export default function ControlRoom() {
     let finalMult = mult * teamMult;
 
     let hasMultiplierUsed = false;
+    let hasShieldUsed = false;
 
     (["review1", "review2", "review3", "bonusPoints"] as const).forEach(
       (key) => {
@@ -425,6 +508,7 @@ export default function ControlRoom() {
             delta = 0;
             messageParts.push(`Penalty blocked by Shield (${fieldName})`);
             updates[key] = Number(team[key]) || 0;
+            if (activeShield.isPending) hasShieldUsed = true;
           } else {
             let activeMult = delta > 0 ? finalMult : mult;
             if (activeMult !== 1 && delta > 0) {
@@ -443,19 +527,25 @@ export default function ControlRoom() {
       }
     );
 
-    if (hasMultiplierUsed && pendingMultiplier) {
-      updates.activeEffects = (team.activeEffects || []).filter(
-        (e) => e.id !== pendingMultiplier.id
-      );
-      if (pendingMultiplier.sourceCardId) {
-        (updates as any).cardsOwned = arrayRemove(
-          pendingMultiplier.sourceCardId
-        );
-        (updates as any).cardsUsed = arrayUnion(pendingMultiplier.sourceCardId);
-      }
-    }
+    if ((hasMultiplierUsed && pendingMultiplier) || (hasShieldUsed && activeShield)) {
+      const removedIds = new Set<string>();
+      if (hasMultiplierUsed && pendingMultiplier) removedIds.add(pendingMultiplier.id);
+      if (hasShieldUsed && activeShield) removedIds.add(activeShield.id);
 
-    // Removed isLockedForRound since rounds are deleted
+      updates.activeEffects = (team.activeEffects || []).filter(
+        (e) => !removedIds.has(e.id)
+      );
+      
+      // Cleanup for consumed cards (idempotent)
+      [pendingMultiplier, activeShield].forEach(effect => {
+        if (effect && ((effect.id === pendingMultiplier?.id && hasMultiplierUsed) || (effect.id === activeShield?.id && hasShieldUsed))) {
+          if (effect.sourceCardId) {
+            (updates as any).cardsOwned = arrayRemove(effect.sourceCardId);
+            (updates as any).cardsUsed = arrayUnion(effect.sourceCardId);
+          }
+        }
+      });
+    }
 
     return { totalDelta, updates, messageParts };
   };
@@ -1190,6 +1280,7 @@ export default function ControlRoom() {
         usedInstantly = true; // The executing team used their card instantly, target gets the effect!
       } else {
         executingTeamUpdates.activeEffects = arrayUnion(newEffect);
+        usedInstantly = true; // Consumed instantly to activate the effect
       }
     }
 
@@ -1789,6 +1880,19 @@ export default function ControlRoom() {
           </button>
         </div>
       </div>
+
+      {/* ⚡ Card Requests Panel (Digital Card System) */}
+      <CardRequestsAdminPanel
+        cardRequests={cardRequests}
+        requestWindow={requestWindow}
+        timeRemaining={requestTimeRemaining}
+        teams={teams}
+        cards={cards}
+        onApprove={handleApproveCardRequest}
+        onReject={handleRejectCardRequest}
+        onOpenWindow={handleOpenRequestWindow}
+        onCloseWindow={handleCloseRequestWindow}
+      />
 
       {/* Team Listing & Control */}
       <section
