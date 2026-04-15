@@ -3064,35 +3064,78 @@ export default function ControlRoom() {
               {cards.map((c) => (
                 <div
                   key={c.id}
-                  className="flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-800/80 px-3 py-2 rounded-lg border border-zinc-800/60 transition-colors"
+                  className={`flex items-center justify-between px-3 py-3 rounded-xl border transition-all duration-300 group ${
+                    c.type === "ATTACK"
+                      ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.02)]"
+                      : c.type === "DEFENSE"
+                      ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.02)]"
+                      : c.type === "UTILITY"
+                      ? "bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40 hover:bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.02)]"
+                      : "bg-[#39ff14]/5 border-[#39ff14]/20 hover:border-[#39ff14]/40 hover:bg-[#39ff14]/10 shadow-[0_0_10px_rgba(57,255,20,0.02)]"
+                  }`}
                 >
-                  <div className="flex gap-3 items-center truncate">
-                    <span className="text-xl shrink-0">{c.icon || "✨"}</span>
-                    <div className="flex flex-col truncate">
-                      <span className="text-xs text-white font-bold truncate">
-                        {c.name}
+                  <div className="flex gap-4 items-center">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shrink-0 transition-transform group-hover:scale-110 ${
+                       c.type === "ATTACK" ? "bg-red-500/10 border-red-500/30 text-red-400" :
+                       c.type === "DEFENSE" ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
+                       c.type === "UTILITY" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" :
+                       "bg-[#39ff14]/10 border-[#39ff14]/30 text-[#39ff14]"
+                    }`}>
+                      <span className="text-2xl drop-shadow-[0_0_8px_currentColor]">{c.icon || "✨"}</span>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] text-white font-black uppercase tracking-tight">
+                          {c.name}
+                        </span>
+                        <span
+                          className={`text-[8px] px-1.5 py-0.5 rounded border font-black uppercase tracking-widest ${
+                            c.type === "ATTACK"
+                              ? "text-red-400 border-red-500/30 bg-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
+                              : c.type === "DEFENSE"
+                              ? "text-blue-400 border-blue-500/30 bg-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.2)]"
+                              : c.type === "UTILITY"
+                              ? "text-purple-400 border-purple-500/30 bg-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.2)]"
+                              : "text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/20 shadow-[0_0_8px_rgba(57,255,20,0.2)]"
+                          }`}
+                        >
+                          {c.type}
+                        </span>
+                      </div>
+                      
+                      {/* Effect Detail */}
+                      <span className={`text-[10px] font-mono font-black mt-1 pb-1 border-b border-white/5 inline-block w-fit ${
+                         c.type === "ATTACK" ? "text-red-300" :
+                         c.type === "DEFENSE" ? "text-blue-300" :
+                         c.type === "UTILITY" ? "text-purple-300" :
+                         "text-[#39ff14]/80"
+                      }`}>
+                        {(() => {
+                          if (c.effect === "add_points") return `+${c.value || 0} points instantly`;
+                          if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} points deduction`;
+                          if (c.effect === "multiply_score") return `${c.value || 0}x Multiplier`;
+                          if (c.effect === "block") return "Shield Block";
+                          if (c.effect === "freeze") return `Freeze Effect (${c.durationValue || 0}s ${c.durationType === "NEXT_ACTION" ? "Next Action" : ""})`;
+                          if (c.effect === "utility") return `Logic: ${c.utilityType?.replace(/_/g, " ")}`;
+                          return c.effect;
+                        })()}
                       </span>
-                      <span
-                        className={`text-[9px] uppercase font-black tracking-widest ${
-                          c.type === "ATTACK"
-                            ? "text-red-400"
-                            : c.type === "DEFENSE"
-                            ? "text-blue-400"
-                            : c.type === "UTILITY"
-                            ? "text-purple-400"
-                            : "text-[#39ff14]"
-                        } truncate`}
-                      >
-                        {c.type} • {c.effect}
-                      </span>
+
+                      {/* Full Description */}
+                      {c.description && (
+                         <p className="text-[10px] text-zinc-500 mt-2 leading-relaxed max-w-sm font-medium">
+                          {c.description}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <button
                     disabled={isLocked}
                     onClick={() => handleDeleteCard(c.id, c.name)}
-                    className="text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 p-2 rounded-md transition-colors disabled:opacity-50 shrink-0 border border-zinc-700/50"
+                    className="text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 p-2.5 rounded-lg transition-all disabled:opacity-50 shrink-0 border border-zinc-700/50 hover:border-red-500/30 ml-2"
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
