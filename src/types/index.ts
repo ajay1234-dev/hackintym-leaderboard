@@ -18,6 +18,7 @@ export interface Team {
   review2: number;
   review3: number;
   bonusPoints: number;
+  code?: string;
   cardsOwned?: string[];
   cardsUsed?: string[];
   activeEffects?: ActiveEffect[];

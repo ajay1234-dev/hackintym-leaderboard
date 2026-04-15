@@ -22,6 +22,8 @@ export default function SelectionZone() {
   const [arenaState, setArenaState] = useState<ArenaState>({ isRevealed: false });
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [inputCode, setInputCode] = useState<string>("");
+  const [isVerified, setIsVerified] = useState<boolean>(false);
 
   // Audio State
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -54,14 +56,42 @@ export default function SelectionZone() {
   // Load identity from JS localStorage
   useEffect(() => {
     const savedTeamId = localStorage.getItem("arenaSelectedTeamId");
-    if (savedTeamId) {
+    const savedVerified = localStorage.getItem("arenaTeamVerified");
+    if (savedTeamId && savedVerified === "true") {
       setSelectedTeamId(savedTeamId);
+      setIsVerified(true);
     }
   }, []);
 
   const handleTeamChange = (val: string) => {
     setSelectedTeamId(val);
+    setIsVerified(false);
     localStorage.setItem("arenaSelectedTeamId", val);
+    localStorage.setItem("arenaTeamVerified", "false");
+  };
+
+  const verifyTeam = () => {
+    if (!selectedTeamId) {
+      showToast("Please select a team first.");
+      return;
+    }
+    const teamData = teams.find((t) => t.id === selectedTeamId);
+    if (!teamData) return;
+    
+    if (!teamData.code) {
+      if (inputCode === "") {
+        showToast("Team has no code set in database.");
+        return;
+      }
+    }
+
+    if (teamData.code === inputCode) {
+      setIsVerified(true);
+      localStorage.setItem("arenaTeamVerified", "true");
+      showToast("Team Verified ✅");
+    } else {
+      showToast("Invalid Code ❌");
+    }
   };
 
   const showToast = (msg: string) => {
@@ -138,8 +168,8 @@ export default function SelectionZone() {
     }
 
     // 2. Is the user valid?
-    if (!selectedTeamId) {
-      showToast("Select your team first from the top right!");
+    if (!selectedTeamId || !isVerified) {
+      showToast("Authenticate your team first!");
       setInvalidDropBoxId(boxId);
       setTimeout(() => setInvalidDropBoxId(null), 500);
       return;
@@ -278,22 +308,67 @@ export default function SelectionZone() {
         {/* Top-Right Team Identity System */}
         <div className="flex flex-col items-end gap-3 w-full md:w-auto">
           <div className="bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl backdrop-blur-md w-full sm:w-72">
-            <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-2">
-              Select Your Team
-            </label>
-            <select
-              value={selectedTeamId}
-              onChange={(e) => handleTeamChange(e.target.value)}
-              disabled={mySelection !== undefined}
-              className="w-full bg-black border border-zinc-700 text-white p-2.5 rounded-lg text-sm outline-none focus:border-[#39ff14] transition-colors disabled:opacity-50"
-            >
-              <option value="">-- NO IDENTITY --</option>
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.teamName}
-                </option>
-              ))}
-            </select>
+            {!isVerified ? (
+              <>
+                <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-2">
+                  Team Authentication
+                </label>
+                <select
+                  value={selectedTeamId}
+                  onChange={(e) => handleTeamChange(e.target.value)}
+                  disabled={mySelection !== undefined}
+                  className="w-full bg-black border border-zinc-700 text-white p-2.5 rounded-lg text-sm outline-none focus:border-[#39ff14] transition-colors disabled:opacity-50 mb-2"
+                >
+                  <option value="">-- SELECT TEAM --</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.teamName}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="password"
+                  placeholder="SECRET CODE"
+                  value={inputCode}
+                  onChange={(e) => setInputCode(e.target.value)}
+                  className="w-full bg-black border border-zinc-700 text-white p-2.5 rounded-lg text-sm outline-none focus:border-[#39ff14] transition-colors mb-2"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") verifyTeam();
+                  }}
+                />
+                <button
+                  onClick={verifyTeam}
+                  className="w-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 p-2.5 rounded-lg text-xs font-bold tracking-widest uppercase hover:bg-cyan-500 hover:text-white transition-colors"
+                >
+                  Verify Team
+                </button>
+              </>
+            ) : (
+              <div className="flex justify-between items-center">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-0.5">
+                    Authenticated As
+                  </label>
+                  <div className="text-sm font-bold text-[#39ff14] truncate">
+                    {selectedTeamData?.teamName} (VERIFIED)
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (mySelection) {
+                      showToast("Cannot logout once a node is secured!");
+                      return;
+                    }
+                    setIsVerified(false);
+                    setInputCode("");
+                    localStorage.setItem("arenaTeamVerified", "false");
+                  }}
+                  className={`text-xs underline ${mySelection ? 'text-zinc-600 cursor-not-allowed cursor-default' : 'text-zinc-400 hover:text-red-400'}`}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
             <p className="text-[9px] text-zinc-500 mt-2 leading-tight">
               Having issues? Disable AdBlock / Brave Shields or whitelist Firebase to prevent <span className="text-red-400 font-bold">ERR_BLOCKED_BY_CLIENT</span>.
             </p>
@@ -301,7 +376,7 @@ export default function SelectionZone() {
 
           {/* Draggable Team Badge */}
           <AnimatePresence>
-            {selectedTeamId && selectedTeamData && (
+            {selectedTeamId && selectedTeamData && isVerified && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, x: 20 }}
                 animate={{ opacity: 1, scale: 1, x: 0 }}
