@@ -241,21 +241,29 @@ export default function CardsLibrary() {
                         <h3 className="text-lg sm:text-xl font-black text-white mb-2 sm:mb-3 uppercase tracking-tight leading-tight shrink-0">
                           {card.name}
                         </h3>
-                        <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-8 flex-1 leading-relaxed font-medium">
+                        <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-8 leading-relaxed font-medium break-words px-1">
                           {card.description}
                         </p>
                       </div>
 
                       <div className="pt-4 border-t border-zinc-800 shrink-0 mt-auto">
-                        <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 font-bold truncate">
-                          Effect Sequence
+                        <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 font-bold">
+                          Logic Sequence
                         </div>
                         <div
-                          className={`text-xs sm:text-sm font-mono font-black tracking-wider px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-zinc-950 border border-zinc-800 truncate w-full ${
+                          className={`text-[11px] sm:text-xs font-mono font-black tracking-wider px-2.5 sm:px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 w-full ${
                             textClass.split(" ")[0]
                           }`}
                         >
-                          {card.effect}
+                          {(() => {
+                            if (card.effect === "add_points") return `+${card.value || 0} Points`;
+                            if (card.effect === "deduct_points") return `${Math.abs(card.value || 0)} Pts Deduction`;
+                            if (card.effect === "multiply_score") return `${card.value || 0}x Multiplier`;
+                            if (card.effect === "block") return "Defense: Shield Block";
+                            if (card.effect === "freeze") return `Effect: Freeze (${card.durationValue || 0}s)`;
+                            if (card.effect === "utility") return `Logic: ${card.utilityType?.replace(/_/g, " ")}`;
+                            return card.effect;
+                          })()}
                         </div>
                       </div>
                     </div>

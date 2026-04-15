@@ -2509,9 +2509,22 @@ export default function ControlRoom() {
                                 } px-2 py-0.5 rounded text-[10px] text-white flex-1 transition-colors`}
                               >
                                 {c.icon}{" "}
-                                <span className="truncate max-w-[80px]">
-                                  {c.name}
-                                </span>
+                                <div className="flex flex-col items-start min-w-0 flex-1">
+                                  <span className="font-bold whitespace-nowrap overflow-visible">
+                                    {c.name}
+                                  </span>
+                                  <span className="text-[8px] text-zinc-400 font-medium leading-tight text-left">
+                                    {c.description || (() => {
+                                      if (c.effect === "add_points") return `+${c.value || 0} pts`;
+                                      if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} pts ded.`;
+                                      if (c.effect === "multiply_score") return `${c.value || 0}x Mult.`;
+                                      if (c.effect === "block") return "Shield Block";
+                                      if (c.effect === "freeze") return `Freeze (${c.durationValue || 0}s)`;
+                                      if (c.effect === "utility") return c.utilityType?.replace(/_/g, " ");
+                                      return "";
+                                    })()}
+                                  </span>
+                                </div>
                                 {isCoolingDown ? (
                                   <span className="ml-auto text-cyan-400 font-bold tracking-widest text-[9px] uppercase">
                                     ⏳ {formattedCD}
@@ -3060,87 +3073,88 @@ export default function ControlRoom() {
               <span>Card Vault</span>
               <span className="text-zinc-600">{cards.length} Cards</span>
             </div>
-            <div className="max-h-[220px] overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-700">
-              {cards.map((c) => (
-                <div
-                  key={c.id}
-                  className={`flex items-center justify-between px-3 py-3 rounded-xl border transition-all duration-300 group ${
-                    c.type === "ATTACK"
-                      ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.02)]"
-                      : c.type === "DEFENSE"
-                      ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.02)]"
-                      : c.type === "UTILITY"
-                      ? "bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40 hover:bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.02)]"
-                      : "bg-[#39ff14]/5 border-[#39ff14]/20 hover:border-[#39ff14]/40 hover:bg-[#39ff14]/10 shadow-[0_0_10px_rgba(57,255,20,0.02)]"
-                  }`}
-                >
-                  <div className="flex gap-4 items-center">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shrink-0 transition-transform group-hover:scale-110 ${
-                       c.type === "ATTACK" ? "bg-red-500/10 border-red-500/30 text-red-400" :
-                       c.type === "DEFENSE" ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
-                       c.type === "UTILITY" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" :
-                       "bg-[#39ff14]/10 border-[#39ff14]/30 text-[#39ff14]"
-                    }`}>
-                      <span className="text-2xl drop-shadow-[0_0_8px_currentColor]">{c.icon || "✨"}</span>
-                    </div>
-                    
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] text-white font-black uppercase tracking-tight">
-                          {c.name}
-                        </span>
-                        <span
-                          className={`text-[8px] px-1.5 py-0.5 rounded border font-black uppercase tracking-widest ${
-                            c.type === "ATTACK"
-                              ? "text-red-400 border-red-500/30 bg-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
-                              : c.type === "DEFENSE"
-                              ? "text-blue-400 border-blue-500/30 bg-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.2)]"
-                              : c.type === "UTILITY"
-                              ? "text-purple-400 border-purple-500/30 bg-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.2)]"
-                              : "text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/20 shadow-[0_0_8px_rgba(57,255,20,0.2)]"
-                          }`}
-                        >
-                          {c.type}
-                        </span>
+            <div className="max-h-[600px] overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-zinc-700">
+              {cards.map((c) => {
+                const autoDesc = (() => {
+                  if (c.effect === "add_points") return `+${c.value || 0} points instantly`;
+                  if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} points deduction`;
+                  if (c.effect === "multiply_score") return `${c.value || 0}x Multiplier`;
+                  if (c.effect === "block") return "Shield Block: Protects against the next attack";
+                  if (c.effect === "freeze") return `Freeze Effect: Stops target for ${c.durationValue || 0}s`;
+                  if (c.effect === "utility") return `Logic: ${c.utilityType?.replace(/_/g, " ")}`;
+                  return "";
+                })();
+
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex items-start justify-between px-4 py-4 rounded-xl border transition-all duration-300 group ${
+                      c.type === "ATTACK"
+                        ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.02)]"
+                        : c.type === "DEFENSE"
+                        ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.02)]"
+                        : c.type === "UTILITY"
+                        ? "bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40 hover:bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.02)]"
+                        : "bg-[#39ff14]/5 border-[#39ff14]/20 hover:border-[#39ff14]/40 hover:bg-[#39ff14]/10 shadow-[0_0_10px_rgba(57,255,20,0.02)]"
+                    }`}
+                  >
+                    <div className="flex gap-4 items-start flex-1">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shrink-0 transition-transform group-hover:scale-110 mt-1 ${
+                         c.type === "ATTACK" ? "bg-red-500/10 border-red-500/30 text-red-400" :
+                         c.type === "DEFENSE" ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
+                         c.type === "UTILITY" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" :
+                         "bg-[#39ff14]/10 border-[#39ff14]/30 text-[#39ff14]"
+                      }`}>
+                        <span className="text-2xl drop-shadow-[0_0_8px_currentColor]">{c.icon || "✨"}</span>
                       </div>
                       
-                      {/* Effect Detail */}
-                      <span className={`text-[10px] font-mono font-black mt-1 pb-1 border-b border-white/5 inline-block w-fit ${
-                         c.type === "ATTACK" ? "text-red-300" :
-                         c.type === "DEFENSE" ? "text-blue-300" :
-                         c.type === "UTILITY" ? "text-purple-300" :
-                         "text-[#39ff14]/80"
-                      }`}>
-                        {(() => {
-                          if (c.effect === "add_points") return `+${c.value || 0} points instantly`;
-                          if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} points deduction`;
-                          if (c.effect === "multiply_score") return `${c.value || 0}x Multiplier`;
-                          if (c.effect === "block") return "Shield Block";
-                          if (c.effect === "freeze") return `Freeze Effect (${c.durationValue || 0}s ${c.durationType === "NEXT_ACTION" ? "Next Action" : ""})`;
-                          if (c.effect === "utility") return `Logic: ${c.utilityType?.replace(/_/g, " ")}`;
-                          return c.effect;
-                        })()}
-                      </span>
-
-                      {/* Full Description */}
-                      {c.description && (
-                         <p className="text-[10px] text-zinc-500 mt-2 leading-relaxed max-w-sm font-medium">
-                          {c.description}
-                        </p>
-                      )}
+                      <div className="flex flex-col flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[13px] text-white font-black uppercase tracking-tight">
+                            {c.name}
+                          </span>
+                          <span
+                            className={`text-[8px] px-1.5 py-0.5 rounded border font-black uppercase tracking-widest ${
+                              c.type === "ATTACK"
+                                ? "text-red-400 border-red-500/30 bg-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
+                                : c.type === "DEFENSE"
+                                ? "text-blue-400 border-blue-500/30 bg-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.2)]"
+                                : c.type === "UTILITY"
+                                ? "text-purple-400 border-purple-500/30 bg-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.2)]"
+                                : "text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/20 shadow-[0_0_8px_rgba(57,255,20,0.2)]"
+                            }`}
+                          >
+                            {c.type}
+                          </span>
+                        </div>
+                        
+                        <div className="text-[11px] text-white mt-2 leading-relaxed font-bold break-words">
+                          {c.description || autoDesc}
+                        </div>
+                        
+                        {/* Hidden logic label for extra clarity */}
+                        <span className={`text-[9px] font-mono font-black mt-2 uppercase opacity-40 ${
+                           c.type === "ATTACK" ? "text-red-300" :
+                           c.type === "DEFENSE" ? "text-blue-300" :
+                           c.type === "UTILITY" ? "text-purple-300" :
+                           "text-[#39ff14]"
+                        }`}>
+                          Effect: {c.effect?.replace(/_/g, " ")} ({c.value || 0})
+                        </span>
+                      </div>
                     </div>
+                    <button
+                      disabled={isLocked}
+                      onClick={() => handleDeleteCard(c.id, c.name)}
+                      className="text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 p-2.5 rounded-lg transition-all disabled:opacity-50 shrink-0 border border-zinc-700/50 hover:border-red-500/30 ml-2 mt-1"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                  <button
-                    disabled={isLocked}
-                    onClick={() => handleDeleteCard(c.id, c.name)}
-                    className="text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 p-2.5 rounded-lg transition-all disabled:opacity-50 shrink-0 border border-zinc-700/50 hover:border-red-500/30 ml-2"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
               {cards.length === 0 && (
-                <div className="text-center text-zinc-600 text-[10px] italic py-4">
+                <div className="text-center text-zinc-600 text-[10px] italic py-8">
                   No cards forged yet.
                 </div>
               )}

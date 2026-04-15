@@ -292,9 +292,22 @@ export function CardRequestPanel({
                   </p>
 
                   {/* Type */}
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">
-                    {card.type}
-                  </p>
+                  <div className="flex flex-col gap-1 items-center">
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                      {card.type}
+                    </p>
+                    <p className="text-[9px] text-zinc-400 leading-tight italic line-clamp-2 px-1">
+                      {card.description || (() => {
+                        if (card.effect === "add_points") return `+${card.value || 0} pts`;
+                        if (card.effect === "deduct_points") return `${Math.abs(card.value || 0)} pts ded.`;
+                        if (card.effect === "multiply_score") return `${card.value || 0}x Mult.`;
+                        if (card.effect === "block") return "Shield Block";
+                        if (card.effect === "freeze") return `Freeze (${card.durationValue || 0}s)`;
+                        if (card.effect === "utility") return card.utilityType?.replace(/_/g, " ");
+                        return "";
+                      })()}
+                    </p>
+                  </div>
 
                   {/* Status Badge */}
                   <div className="mt-auto w-full flex justify-center">
