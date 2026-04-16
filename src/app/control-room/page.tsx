@@ -147,6 +147,8 @@ export default function ControlRoom() {
   const [injTrigMM, setInjTrigMM] = useState("");
   const [injTrigSS, setInjTrigSS] = useState("");
 
+  const [cardSearchQuery, setCardSearchQuery] = useState("");
+
   // Manual Score State
   const [draftScores, setDraftScores] = useState<
     Record<string, Record<string, string | number>>
@@ -2967,13 +2969,6 @@ export default function ControlRoom() {
                         </span>
                       </div>
                     </div>
-                    <button
-                      disabled={isLocked}
-                      onClick={() => handleDeleteCard(c.id, c.name)}
-                      className="text-zinc-500 hover:text-red-500 bg-zinc-800/50 hover:bg-red-500/10 p-2.5 rounded-lg transition-all disabled:opacity-50 shrink-0 border border-zinc-700/50 hover:border-red-500/30 ml-2 mt-1"
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
                 );
               })}
@@ -3372,6 +3367,62 @@ export default function ControlRoom() {
           </div>
         </section>
       </div>
+
+      {/* Card Management Section */}
+      <section className="glass-panel p-5 border border-red-900/40 rounded-2xl bg-gradient-to-br from-zinc-950 to-red-950/10 mt-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div>
+            <h2 className="text-xl font-black text-red-500 uppercase flex items-center gap-2 tracking-tighter">
+              <Trash2 size={24} className="animate-pulse" />
+              Card Management <span className="text-zinc-700 font-mono text-sm ml-2">/ Danger Zone</span>
+            </h2>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mt-1">Permanently remove cards from the arena registry</p>
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+            <input 
+              type="text"
+              placeholder="Search registry..."
+              value={cardSearchQuery}
+              onChange={(e) => setCardSearchQuery(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-red-500/50 transition-all font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-red-900/30">
+          {cards
+            .filter(c => c.name.toLowerCase().includes(cardSearchQuery.toLowerCase()))
+            .map((c) => (
+              <div 
+                key={c.id} 
+                className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:border-red-500/30 transition-all group scale-100 hover:scale-[1.02]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400 group-hover:text-red-400 transition-colors">
+                    <span className="text-xl">{c.icon || "✨"}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-black text-white uppercase truncate max-w-[120px]">{c.name}</span>
+                    <span className="text-[9px] text-zinc-600 uppercase font-bold tracking-tighter">{c.type}</span>
+                  </div>
+                </div>
+                <button
+                  disabled={isLocked}
+                  onClick={() => handleDeleteCard(c.id, c.name)}
+                  className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-40 group-hover:opacity-100"
+                  title="Delete Card Permanentely"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+        </div>
+
+        {cards.length === 0 && (
+          <div className="text-center py-10 text-zinc-700 italic text-sm">No cards available in registry.</div>
+        )}
+      </section>
 
       {/* Bounty Completion Modal */}
       {completingBounty && (
