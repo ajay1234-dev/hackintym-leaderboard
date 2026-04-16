@@ -183,7 +183,7 @@ export default function CardsLibrary() {
                   textClass =
                     "text-yellow-300 border-yellow-400 bg-yellow-400/20 shadow-[inset_0_0_15px_rgba(234,179,8,0.3),0_0_20px_rgba(234,179,8,0.6)] drop-shadow-[0_0_10px_rgba(255,255,255,0.7)] ring-1 ring-yellow-400/50";
                   cardGlowEffect =
-                    "animate-[pulse_3s_ease-in-out_infinite_alternate] z-10";
+                    "animate-[pulse_6s_ease-in-out_infinite_alternate] z-10";
                 }
 
                 const hasLucideIcon = card.icon && card.icon in CARD_ICONS;
@@ -203,7 +203,7 @@ export default function CardsLibrary() {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3, delay: i * 0.05 }}
                     key={card.id}
-                    className={`w-full min-h-[460px] flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default ${borderClass} ${cardGlowEffect}`}
+                    className={`w-full min-h-[460px] flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default overflow-hidden ${borderClass} ${cardGlowEffect}`}
                   >
                     {/* Background Glow */}
                     <div

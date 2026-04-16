@@ -136,7 +136,7 @@ export function CardRequestPanel({
     switch (rarity) {
       case "LEGENDARY":
         return {
-          border: "border-yellow-500/40",
+          border: "border-yellow-500/40 animate-[pulse_6s_ease-in-out_infinite]",
           bg: "bg-yellow-500/10",
           icon: "text-yellow-400",
           shadow: "shadow-[0_0_15px_rgba(234,179,8,0.15)]",
@@ -258,7 +258,7 @@ export function CardRequestPanel({
                   initial={{ opacity: 0, scale: 0.9, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={{ delay: idx * 0.05, type: "spring" }}
-                  className={`relative group rounded-2xl border p-4 flex flex-col items-center text-center transition-all duration-300 ${style.border} ${style.bg} ${style.shadow} ${
+                  className={`relative group rounded-2xl border p-4 flex flex-col items-center text-center transition-all duration-300 overflow-hidden ${style.border} ${style.bg} ${style.shadow} ${
                     isDisabled
                       ? "opacity-70 cursor-not-allowed"
                       : "cursor-pointer hover:scale-[1.04] hover:shadow-[0_0_25px_var(--glow)] active:scale-[0.98]"

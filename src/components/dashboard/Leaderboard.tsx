@@ -794,7 +794,7 @@ export default function Leaderboard() {
         "text-purple-400 border-purple-500/20 bg-purple-500/10 shadow-[inset_0_0_6px_rgba(168,85,247,0.1),_0_0_8px_rgba(168,85,247,0.3)]";
     else if (card.type === "LEGENDARY")
       typeColor =
-        "text-yellow-400 border-yellow-500/20 bg-yellow-500/10 shadow-[inset_0_0_8px_rgba(234,179,8,0.2),_0_0_12px_rgba(234,179,8,0.4)] animate-[pulse_2s_ease-in-out_infinite]";
+        "text-yellow-400 border-yellow-500/20 bg-yellow-500/10 shadow-[inset_0_0_8px_rgba(234,179,8,0.2),_0_0_12px_rgba(234,179,8,0.4)] animate-[pulse_6s_ease-in-out_infinite]";
 
     let finalStyle = typeColor;
     if (isActive) {

@@ -3027,7 +3027,7 @@ export default function ControlRoom() {
                     return {
                       border:
                         rarity === "LEGENDARY"
-                          ? "border-purple-500/60 shadow-[0_0_25px_rgba(168,85,247,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-purple-900/20 animate-[pulse_4s_ease-in-out_infinite_alternate]"
+                          ? "border-purple-500/60 shadow-[0_0_25px_rgba(168,85,247,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-purple-900/20 animate-[pulse_6s_ease-in-out_infinite_alternate] overflow-hidden"
                           : rarity === "RARE"
                           ? "border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10"
                           : "border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.05)]",
@@ -3040,7 +3040,7 @@ export default function ControlRoom() {
                   return {
                     border:
                       rarity === "LEGENDARY"
-                        ? "border-[#39ff14]/60 shadow-[0_0_25px_rgba(57,255,20,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-[#39ff14]/20 animate-[pulse_4s_ease-in-out_infinite_alternate]"
+                        ? "border-[#39ff14]/60 shadow-[0_0_25px_rgba(57,255,20,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-[#39ff14]/20 animate-[pulse_6s_ease-in-out_infinite_alternate] overflow-hidden"
                         : rarity === "RARE"
                         ? "border-[#39ff14]/40 shadow-[0_0_15px_rgba(57,255,20,0.1)] bg-gradient-to-br from-zinc-900 to-[#39ff14]/10"
                         : "border-[#39ff14]/30 shadow-[0_0_15px_rgba(57,255,20,0.05)]",
@@ -3184,7 +3184,7 @@ export default function ControlRoom() {
                 return (
                   <div
                     key={c.id}
-                    className={`flex items-start justify-between px-4 py-4 rounded-xl border transition-all duration-300 group ${
+                    className={`flex items-start justify-between px-4 py-4 rounded-xl border transition-all duration-300 group overflow-hidden ${
                       c.type === "ATTACK"
                         ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.02)]"
                         : c.type === "DEFENSE"

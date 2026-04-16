@@ -86,8 +86,9 @@ export const GlobalEffectsProvider = ({ children }: { children: ReactNode }) => 
 
   useEffect(() => {
     const enable = () => enableAudio();
-    window.addEventListener("click", enable, { once: true });
-    return () => window.removeEventListener("click", enable);
+    const events = ["click", "mousedown", "keydown", "touchstart"];
+    events.forEach(e => window.addEventListener(e, enable, { once: true }));
+    return () => events.forEach(e => window.removeEventListener(e, enable));
   }, []);
 
   useEffect(() => {

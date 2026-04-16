@@ -192,7 +192,7 @@ export function CardCelebrationPopup({
               className={`
                 relative flex flex-col items-center p-2 sm:p-3 md:p-4 rounded-xl border-2
                 ${rarityStyles.borderColor} ${rarityStyles.bgGlow}
-                backdrop-blur-sm
+                backdrop-blur-sm overflow-hidden
               `}
               style={{
                 boxShadow: `inset 0 0 20px ${rarityStyles.glowColor}, 0 0 30px ${rarityStyles.glowColor}`,
