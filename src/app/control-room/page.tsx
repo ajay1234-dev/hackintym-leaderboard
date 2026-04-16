@@ -2898,87 +2898,7 @@ export default function ControlRoom() {
             </div>
           </div>
 
-          {/* Card Vault */}
-          <div className="mt-4 pt-4 border-t border-zinc-800">
-            <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-500 mb-3 flex justify-between">
-              <span>Card Vault</span>
-              <span className="text-zinc-600">{cards.length} Cards</span>
-            </div>
-            <div className="max-h-[600px] overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-zinc-700">
-              {cards.map((c) => {
-                const autoDesc = (() => {
-                  if (c.effect === "add_points") return `+${c.value || 0} points instantly`;
-                  if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} points deduction`;
-                  if (c.effect === "multiply_score") return `${c.value || 0}x Multiplier`;
-                  if (c.effect === "block") return "Shield Block: Protects against the next attack";
-                  if (c.effect === "freeze") return `Freeze Effect: Stops target for ${c.durationValue || 0} mins`;
-                  if (c.effect === "global_freeze") return `GLOBAL LOCKOUT: All teams frozen (${c.durationValue || 0} mins)`;
-                  if (c.effect === "mind_hack") return `Mind Hack: Steal ${c.value || 0} points from target`;
-                  return "";
-                })();
 
-                return (
-                  <div
-                    key={c.id}
-                    className={`flex items-start justify-between px-4 py-4 rounded-xl border transition-all duration-300 group overflow-hidden ${
-                      c.type === "ATTACK"
-                        ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.02)]"
-                        : c.type === "DEFENSE"
-                        ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.02)]"
-                        : "bg-[#39ff14]/5 border-[#39ff14]/20 hover:border-[#39ff14]/40 hover:bg-[#39ff14]/10 shadow-[0_0_10px_rgba(57,255,20,0.02)]"
-                    }`}
-                  >
-                    <div className="flex gap-4 items-start flex-1">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shrink-0 transition-transform group-hover:scale-110 mt-1 ${
-                         c.type === "ATTACK" ? "bg-red-500/10 border-red-500/30 text-red-400" :
-                         c.type === "DEFENSE" ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
-                         "bg-[#39ff14]/10 border-[#39ff14]/30 text-[#39ff14]"
-                      }`}>
-                        <span className="text-2xl drop-shadow-[0_0_8px_currentColor]">{c.icon || "✨"}</span>
-                      </div>
-                      
-                      <div className="flex flex-col flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[13px] text-white font-black uppercase tracking-tight">
-                            {c.name}
-                          </span>
-                          <span
-                            className={`text-[8px] px-1.5 py-0.5 rounded border font-black uppercase tracking-widest ${
-                              c.type === "ATTACK"
-                                ? "text-red-400 border-red-500/30 bg-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
-                                : c.type === "DEFENSE"
-                                ? "text-blue-400 border-blue-500/30 bg-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.2)]"
-                                : "text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/20 shadow-[0_0_8px_rgba(57,255,20,0.2)]"
-                            }`}
-                          >
-                            {c.type}
-                          </span>
-                        </div>
-                        
-                        <div className="text-[11px] text-white mt-2 leading-relaxed font-bold break-words">
-                          {c.description || autoDesc}
-                        </div>
-                        
-                        {/* Hidden logic label for extra clarity */}
-                        <span className={`text-[9px] font-mono font-black mt-2 uppercase opacity-40 ${
-                           c.type === "ATTACK" ? "text-red-300" :
-                           c.type === "DEFENSE" ? "text-blue-300" :
-                           "text-[#39ff14]"
-                        }`}>
-                          Effect: {c.effect?.replace(/_/g, " ")} ({c.value || 0})
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {cards.length === 0 && (
-                <div className="text-center text-zinc-600 text-[10px] italic py-8">
-                  No cards forged yet.
-                </div>
-              )}
-            </div>
-          </div>
         </section>
       </div>
 
@@ -3390,33 +3310,56 @@ export default function ControlRoom() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-red-900/30">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-red-900/30">
           {cards
             .filter(c => c.name.toLowerCase().includes(cardSearchQuery.toLowerCase()))
-            .map((c) => (
-              <div 
-                key={c.id} 
-                className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:border-red-500/30 transition-all group scale-100 hover:scale-[1.02]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400 group-hover:text-red-400 transition-colors">
-                    <span className="text-xl">{c.icon || "✨"}</span>
+            .map((c) => {
+              const autoPower = (() => {
+                if (c.effect === "add_points") return `+${c.value || 0} pts`;
+                if (c.effect === "deduct_points") return `-${Math.abs(c.value || 0)} pts`;
+                if (c.effect === "multiply_score") return `${c.value || 2}x Mult`;
+                if (c.effect === "block") return "Shield";
+                if (c.effect === "freeze") return `Freeze ${c.durationValue || 0}m`;
+                if (c.effect === "global_freeze") return `Global Freeze ${c.durationValue || 0}m`;
+                if (c.effect === "mind_hack") return `Steal ${c.value || 0} pts`;
+                if (c.effect === "extend_time") return `+${c.value || 0}m Time`;
+                return c.effect;
+              })();
+
+              return (
+                <div 
+                  key={c.id} 
+                  className="flex flex-col p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:border-red-500/30 transition-all group relative overflow-hidden shrink-0"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400 group-hover:text-red-400 transition-colors shrink-0">
+                        <span className="text-2xl">{c.icon || "✨"}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-white uppercase">{c.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">{c.type}</span>
+                          <span className="text-[9px] text-red-500/80 uppercase font-black bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">{autoPower}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      disabled={isLocked}
+                      onClick={() => handleDeleteCard(c.id, c.name)}
+                      className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-40 group-hover:opacity-100 shrink-0"
+                      title="Delete Card Permanently"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-black text-white uppercase truncate max-w-[120px]">{c.name}</span>
-                    <span className="text-[9px] text-zinc-600 uppercase font-bold tracking-tighter">{c.type}</span>
+                  
+                  <div className="text-[11px] text-zinc-400 leading-relaxed font-medium line-clamp-2 italic">
+                    {c.description || "No description provided."}
                   </div>
                 </div>
-                <button
-                  disabled={isLocked}
-                  onClick={() => handleDeleteCard(c.id, c.name)}
-                  className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-40 group-hover:opacity-100"
-                  title="Delete Card Permanentely"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
+              );
+            })}
         </div>
 
         {cards.length === 0 && (
