@@ -1009,11 +1009,15 @@ export default function ControlRoom() {
     else if (effect === "freeze")
       base = `Freeze opponent${
         durationType === "TIMED" && durationValue
-          ? ` for ${durationValue} seconds`
+          ? ` for ${durationValue} mins`
           : ""
       }`;
     else if (effect === "extend_time")
-      base = `Extends time by ${value || 0} seconds`;
+      base = `Extends time by ${value || 0} mins`;
+    else if (effect === "mind_hack")
+      base = `Steal up to ${value || 0} pts from target team`;
+    else if (effect === "global_freeze")
+      base = `FORCE REBOOT: Freeze ALL teams for ${durationValue || 0} mins`;
     else base = effect;
 
     if (
@@ -1022,7 +1026,7 @@ export default function ControlRoom() {
       effect !== "freeze" &&
       effect !== "extend_time"
     ) {
-      base += ` for ${durationValue} seconds`;
+      base += ` for ${durationValue} mins`;
     }
     return base;
   };
@@ -1360,6 +1364,7 @@ export default function ControlRoom() {
       cardInfo.type === "ATTACK" ||
       cardInfo.effect === "deduct_points" ||
       cardInfo.effect === "freeze" ||
+      cardInfo.effect === "mind_hack" ||
       (cardInfo.effect === "utility" && ["REVEAL_PULSE", "LOCK_BREAKER", "REALITY_REWRITE"].includes(cardInfo.utilityType || ''));
 
     if (requiresTarget) {
@@ -1452,17 +1457,100 @@ export default function ControlRoom() {
           );
         }
       }
+    } else if (cardInfo.effect === "mind_hack") {
+      if (cardInfo.value && targetTeamInstance) {
+        // Validation: Block check on target
+        const hasBlock = targetTeamInstance.activeEffects?.find(
+          (e) => e.effect === "block" && (!e.expiresAt || e.expiresAt > Date.now())
+        );
+        const hasFreeze = targetTeamInstance.activeEffects?.find(
+          (e) => e.effect === "freeze" && (!e.expiresAt || e.expiresAt > Date.now())
+        );
+
+        if (hasFreeze) {
+          showToast(`Mind Hack failed: ${targetTeamInstance.teamName} is already frozen.`, "info");
+          return;
+        }
+
+        if (hasBlock) {
+          // Consume the block
+          const batch = writeBatch(db);
+          batch.update(doc(db, "teams", targetTeamInstance.id), {
+            activeEffects: arrayRemove(hasBlock)
+          });
+          if (hasBlock.sourceCardId) {
+            batch.update(doc(db, "teams", targetTeamInstance.id), {
+              cardsOwned: arrayRemove(hasBlock.sourceCardId),
+              cardsUsed: arrayUnion(hasBlock.sourceCardId)
+            });
+          }
+          await batch.commit();
+          showToast(`Mind Hack blocked by ${targetTeamInstance.teamName}'s Shield!`, "info");
+          usedInstantly = true; // Still consume the mind hack card
+        } else {
+          // Execute Steal
+          const stealAmount = Math.min(cardInfo.value, targetTeamInstance.bonusPoints + (targetTeamInstance.review1 || 0) + (targetTeamInstance.review2 || 0) + (targetTeamInstance.review3 || 0));
+          // For simplicity and matching user request: calculate based on total score logic or just bonus points
+          // User said: "target.score". We use bonusPoints as the primary pool for cards.
+          const actualSteal = Math.min(cardInfo.value, Math.max(0, targetTeamInstance.bonusPoints));
+          
+          const batch = writeBatch(db);
+          batch.update(doc(db, "teams", team.id), {
+            bonusPoints: (Number(team.bonusPoints) || 0) + actualSteal
+          });
+          batch.update(doc(db, "teams", targetTeamInstance.id), {
+            bonusPoints: (Number(targetTeamInstance.bonusPoints) || 0) - actualSteal
+          });
+          
+          await batch.commit();
+          showToast(`Mind Hack Successful! Stole ${actualSteal} points from ${targetTeamInstance.teamName}`, "success");
+          usedInstantly = true;
+        }
+      }
+    } else if (cardInfo.effect === "global_freeze") {
+      // Safety: check for active global freeze
+      const anyGlobalFreeze = teams.some(t => t.activeEffects?.some(e => e.effect === "freeze" && e.isGlobal && (!e.expiresAt || e.expiresAt > Date.now())));
+      if (anyGlobalFreeze) {
+        showToast("System Override already active: Global Freeze in progress.", "info");
+        return;
+      }
+      
+      const actualDuration = cardInfo.durationValue || 0;
+      const expiresAt = Date.now() + (actualDuration * 60) * 1000;
+      const globalEffect = {
+        id: Math.random().toString(36).substring(2, 9),
+        effect: "freeze",
+        type: "ATTACK",
+        value: 0,
+        expiresAt,
+        isPending: false,
+        icon: "🌪",
+        sourceCardId: cardId,
+        sourceTeamId: teamId,
+        isGlobal: true
+      };
+
+      const batch = writeBatch(db);
+      teams.forEach(t => {
+        batch.update(doc(db, "teams", t.id), {
+          activeEffects: arrayUnion(globalEffect)
+        });
+      });
+      
+      await batch.commit();
+      showToast("SYSTEM OVERRIDE: Global Freeze Activated!", "success");
+      usedInstantly = true;
     } else if (cardInfo.effect === "extend_time") {
       if (cardInfo.value && globalEndTime) {
         try {
           await setDoc(
             doc(db, "globalState", "timer"),
             {
-              endTime: globalEndTime + cardInfo.value * 1000,
+              endTime: globalEndTime + (cardInfo.value || 0) * 60 * 1000,
             },
             { merge: true }
           );
-          showToast(`Global Timer extended by ${cardInfo.value}s!`, "success");
+          showToast(`Global Timer extended by ${cardInfo.value} mins!`, "success");
         } catch (e) {
           console.error(e);
         }
@@ -1483,7 +1571,7 @@ export default function ControlRoom() {
           ? true
           : false;
       const expiresAt =
-        autoTimed && actualDuration ? Date.now() + actualDuration * 1000 : null;
+        autoTimed && actualDuration ? Date.now() + (actualDuration * 60) * 1000 : null;
 
       if (cardInfo.effect === "multiply_score") {
         // Check for existing multiplier
@@ -2519,7 +2607,7 @@ export default function ControlRoom() {
                                       if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} pts ded.`;
                                       if (c.effect === "multiply_score") return `${c.value || 0}x Mult.`;
                                       if (c.effect === "block") return "Shield Block";
-                                      if (c.effect === "freeze") return `Freeze (${c.durationValue || 0}s)`;
+                                      if (c.effect === "freeze") return `Freeze (${c.durationValue || 0} mins)`;
                                       if (c.effect === "utility") return c.utilityType?.replace(/_/g, " ");
                                       return "";
                                     })()}
@@ -2778,6 +2866,8 @@ export default function ControlRoom() {
                 <option value="multiply_score">Mult Score</option>
                 <option value="block">Block</option>
                 <option value="freeze">Freeze</option>
+                <option value="global_freeze">Global Freeze</option>
+                <option value="mind_hack">Mind Hack (Steal)</option>
                 <option value="extend_time">Extend Time</option>
                 <option value="utility">Utility Logic</option>
               </select>
@@ -2844,7 +2934,7 @@ export default function ControlRoom() {
                 {newCard.durationType === "TIMED" && (
                   <input
                     type="number"
-                    placeholder="Secs"
+                    placeholder="Mins"
                     value={
                       newCard.durationValue === null
                         ? ""
@@ -2986,11 +3076,15 @@ export default function ControlRoom() {
                   else if (effect === "freeze")
                     base = `Freeze opponent${
                       durType === "TIMED" && durVal
-                        ? ` for ${durVal} seconds`
+                        ? ` for ${durVal} mins`
                         : ""
                     }`;
+                  else if (effect === "global_freeze")
+                    base = `GLOBAL FREEZE: Total Lockout (${durVal || 0} mins)`;
+                  else if (effect === "mind_hack")
+                    base = `Mind Hack: Steal ${value || 0} pts`;
                   else if (effect === "extend_time")
-                    base = `Extends time by ${value || 0} seconds`;
+                    base = `Extends time by ${value || 0} mins`;
                   else base = "Configure effect...";
 
                   if (
@@ -2999,7 +3093,7 @@ export default function ControlRoom() {
                     effect !== "freeze" &&
                     effect !== "extend_time"
                   ) {
-                    base += ` for ${durVal} seconds`;
+                    base += ` for ${durVal} mins`;
                   }
                   return base;
                 })();
@@ -3080,7 +3174,9 @@ export default function ControlRoom() {
                   if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} points deduction`;
                   if (c.effect === "multiply_score") return `${c.value || 0}x Multiplier`;
                   if (c.effect === "block") return "Shield Block: Protects against the next attack";
-                  if (c.effect === "freeze") return `Freeze Effect: Stops target for ${c.durationValue || 0}s`;
+                  if (c.effect === "freeze") return `Freeze Effect: Stops target for ${c.durationValue || 0} mins`;
+                  if (c.effect === "global_freeze") return `GLOBAL LOCKOUT: All teams frozen (${c.durationValue || 0} mins)`;
+                  if (c.effect === "mind_hack") return `Mind Hack: Steal ${c.value || 0} points from target`;
                   if (c.effect === "utility") return `Logic: ${c.utilityType?.replace(/_/g, " ")}`;
                   return "";
                 })();

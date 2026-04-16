@@ -61,12 +61,16 @@ const ActiveEffectBadge = ({
   if (effect.expiresAt && timeLeft === 0) return null;
 
   let textToDisplay = effect.effect.replace("_", " ").toUpperCase();
+  if (effect.isGlobal) {
+    textToDisplay = `GLOBAL ${effect.effect.toUpperCase().replace("_", " ")}`;
+  }
+
   if (effect.effect === "multiply_score") {
     textToDisplay = `${effect.value}x Next Score`;
   } else if (effect.effect === "block") {
     textToDisplay = "Shield";
   } else if (effect.effect === "freeze") {
-    textToDisplay = "Freeze";
+    textToDisplay = effect.isGlobal ? "GLOBAL FREEZE" : "Freeze";
   } else if (effect.effect === "precision_lock") {
     textToDisplay = "Precision Lock";
   } else if (effect.effect === "vision") {
@@ -97,7 +101,7 @@ const ActiveEffectBadge = ({
       {IconComp ? (
         <IconComp
           className={`w-3 h-3 ${
-            effect.isPending ? "text-blue-200" : "text-zinc-400"
+            effect.isPending ? "text-blue-200" : effect.isGlobal ? "text-red-400" : "text-zinc-400"
           }`}
         />
       ) : (
@@ -571,6 +575,11 @@ export default function Leaderboard() {
     },
   });
 
+  // Detect if Global Freeze is active on ANY team
+  const isGloballyFrozen = teams.some(t => 
+    t.activeEffects?.some(e => e.effect === "freeze" && e.isGlobal && (!e.expiresAt || e.expiresAt > Date.now()))
+  );
+
   useEffect(() => {
     isFirstRender.current = false;
   }, []);
@@ -841,7 +850,24 @@ export default function Leaderboard() {
   };
 
   return (
-    <div className="flex flex-col h-full rounded-2xl glass-panel border border-zinc-800 overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-zinc-950/90">
+    <div className={`relative w-full max-w-7xl mx-auto px-1 sm:px-4 py-4 sm:py-8 pt-2 transition-all duration-700 ${isGloballyFrozen ? 'filter blur-[1px] brightness-75 bg-red-900/5' : ''}`}>
+      {/* Global Override Banner */}
+      <AnimatePresence>
+        {isGloballyFrozen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] bg-red-600/90 text-white px-8 py-2 rounded-full border-2 border-white/30 shadow-[0_0_30px_rgba(220,38,38,0.5)] flex items-center gap-3 backdrop-blur-md"
+          >
+            <span className="animate-pulse text-lg">🌪</span>
+            <span className="font-black uppercase tracking-[0.3em] text-sm text-white">System Override: Global Freeze Active</span>
+            <span className="animate-pulse text-lg">🌪</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-col h-full rounded-2xl glass-panel border border-zinc-800 overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-zinc-950/90">
       {/* UI Interaction Lock Overlay */}
       {revealPhase !== "IDLE" && revealPhase !== "POST_REVEAL" && (
         <div className="fixed inset-0 z-[100] cursor-not-allowed"></div>
@@ -911,5 +937,6 @@ export default function Leaderboard() {
         </div>
       </motion.div>
     </div>
-  );
+  </div>
+);
 }

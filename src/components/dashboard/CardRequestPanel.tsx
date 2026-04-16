@@ -302,7 +302,9 @@ export function CardRequestPanel({
                         if (card.effect === "deduct_points") return `${Math.abs(card.value || 0)} pts ded.`;
                         if (card.effect === "multiply_score") return `${card.value || 0}x Mult.`;
                         if (card.effect === "block") return "Shield Block";
-                        if (card.effect === "freeze") return `Freeze (${card.durationValue || 0}s)`;
+                        if (card.effect === "freeze") return `Freeze (${card.durationValue || 0} mins)`;
+                        if (card.effect === "global_freeze") return `Global Freeze (${card.durationValue || 0} mins)`;
+                        if (card.effect === "mind_hack") return `Steal ${card.value || 0} Points`;
                         if (card.effect === "utility") return card.utilityType?.replace(/_/g, " ");
                         return "";
                       })()}

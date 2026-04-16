@@ -9,6 +9,7 @@ export interface ActiveEffect {
   sourceCardId?: string;
   sourceTeamId?: string;
   targetTeamId?: string;
+  isGlobal?: boolean;
 }
 
 export interface Team {
@@ -63,6 +64,8 @@ export interface Card {
     | "freeze"
     | "extend_time"
     | "utility"
+    | "mind_hack"
+    | "global_freeze"
     | string;
   utilityType?: UtilityType;
   value: number | null;

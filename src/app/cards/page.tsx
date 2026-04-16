@@ -260,7 +260,7 @@ export default function CardsLibrary() {
                             if (card.effect === "deduct_points") return `${Math.abs(card.value || 0)} Pts Deduction`;
                             if (card.effect === "multiply_score") return `${card.value || 0}x Multiplier`;
                             if (card.effect === "block") return "Defense: Shield Block";
-                            if (card.effect === "freeze") return `Effect: Freeze (${card.durationValue || 0}s)`;
+                            if (card.effect === "freeze") return `Effect: Freeze (${card.durationValue || 0} mins)`;
                             if (card.effect === "utility") return `Logic: ${card.utilityType?.replace(/_/g, " ")}`;
                             return card.effect;
                           })()}
