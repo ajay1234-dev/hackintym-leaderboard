@@ -34,7 +34,7 @@ export default function CardsLibrary() {
           ...data,
           rarity,
         } as Card;
-      });
+      }).filter(card => card.type !== 'UTILITY' && (card as any).effect !== 'utility');
 
       cardsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       setCards(cardsData);
@@ -261,7 +261,6 @@ export default function CardsLibrary() {
                             if (card.effect === "multiply_score") return `${card.value || 0}x Multiplier`;
                             if (card.effect === "block") return "Defense: Shield Block";
                             if (card.effect === "freeze") return `Effect: Freeze (${card.durationValue || 0} mins)`;
-                            if (card.effect === "utility") return `Logic: ${card.utilityType?.replace(/_/g, " ")}`;
                             return card.effect;
                           })()}
                         </div>

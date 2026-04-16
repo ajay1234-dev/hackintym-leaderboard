@@ -29,7 +29,6 @@ import {
   PendingCardSubmission,
   CardWindowState,
   ActiveEffect,
-  UtilityType,
 } from "@/types";
 import { syncSession } from "@/app/actions";
 import { motion, AnimatePresence } from "framer-motion";
@@ -99,7 +98,6 @@ export default function ControlRoom() {
     type: "BOOST",
     description: "",
     effect: "add_points",
-    utilityType: "DATA_PING",
     value: null,
     durationType: "INSTANT",
     durationValue: null,
@@ -415,7 +413,7 @@ export default function ControlRoom() {
           "COMMON"
         ).toUpperCase();
         return { id: doc.id, ...data, rarity } as Card;
-      });
+      }).filter(c => (c as any).type !== 'UTILITY' && (c as any).effect !== 'utility');
       setCards(cardsData);
     });
 
@@ -1039,8 +1037,6 @@ export default function ControlRoom() {
         return "red";
       case "DEFENSE":
         return "blue";
-      case "UTILITY":
-        return "purple";
       default:
         return "zinc";
     }
@@ -1146,208 +1142,6 @@ export default function ControlRoom() {
     showToast(`Removed corrupted ghost ID from ${teamName}.`, "info");
   };
 
-  const applyUtilityCard = async (card: Card, team: Team, targetTeamId?: string) => {
-    const type = card.utilityType;
-    if (!type) {
-      showToast("Utility card missing specific type logic", "info");
-      return false;
-    }
-
-    const targetTeam = targetTeamId ? teams.find(t => t.id === targetTeamId) : null;
-
-    switch (type) {
-      case "DATA_PING": {
-        const topTeams = [...teams]
-          .sort((a, b) => {
-            const scoreA = (a.review1 || 0) + (a.review2 || 0) + (a.review3 || 0) + (a.bonusPoints || 0);
-            const scoreB = (b.review1 || 0) + (b.review2 || 0) + (b.review3 || 0) + (b.bonusPoints || 0);
-            return scoreB - scoreA;
-          })
-          .slice(0, 3);
-        
-        const message = topTeams.map((t, i) => `${i + 1}. ${t.teamName}`).join(", ");
-        showToast(`🛰️ TOP 3: ${message}`, "success");
-        return true;
-      }
-
-      case "PRECISION_LOCK": {
-        const expiresAt = Date.now() + 60 * 1000;
-        await updateDoc(doc(db, "teams", team.id), {
-          activeEffects: arrayUnion({
-            id: Math.random().toString(36).substring(2, 9),
-            effect: "precision_lock",
-            type: "UTILITY",
-            expiresAt,
-            isPending: false,
-            icon: "Target",
-            sourceCardId: card.id,
-            sourceTeamId: team.id
-          })
-        });
-        showToast("🎯 Precision Lock Active (60s). Bypassing shields!", "success");
-        return true;
-      }
-
-      case "ENERGY_REFRESH": {
-        const cooldowns = team.cardCooldowns || {};
-        const newCooldowns: Record<string, number> = {};
-        Object.entries(cooldowns).forEach(([id, ts]) => {
-          const remaining = ts - Date.now();
-          if (remaining > 0) {
-            newCooldowns[id] = Date.now() + (remaining / 2);
-          }
-        });
-        await updateDoc(doc(db, "teams", team.id), { cardCooldowns: newCooldowns });
-        showToast("⚡ Energy Refreshed! All cooldowns reduced by 50%.", "success");
-        return true;
-      }
-
-      case "REVEAL_PULSE": {
-        if (!targetTeam) return false;
-        const effects = targetTeam.activeEffects?.map(e => e.effect).join(", ") || "No active effects";
-        showToast(`👁️ Pulse Reveal (${targetTeam.teamName}): ${effects}`, "info");
-        return true;
-      }
-
-      case "COOLDOWN_RESET": {
-        // Find the card with the highest cooldown
-        const cooldowns = team.cardCooldowns || {};
-        const entries = Object.entries(cooldowns).sort((a, b) => b[1] - a[1]);
-        if (entries.length === 0 || entries[0][1] <= Date.now()) {
-          showToast("No active cooldowns to reset", "info");
-          return false;
-        }
-        const [idToReset] = entries[0];
-        const updated = { ...cooldowns };
-        delete updated[idToReset];
-        await updateDoc(doc(db, "teams", team.id), { cardCooldowns: updated });
-        showToast("🔄 Cooldown Reset successfully!", "success");
-        return true;
-      }
-
-      case "TARGET_SCANNER": {
-        const bestTarget = [...teams]
-          .filter(t => t.id !== team.id)
-          .filter(t => !t.activeEffects?.some(e => e.effect === "block" && (!e.expiresAt || e.expiresAt > Date.now())))
-          .sort((a, b) => {
-            const scoreA = (a.review1 || 0) + (a.review2 || 0) + (a.review3 || 0) + (a.bonusPoints || 0);
-            const scoreB = (b.review1 || 0) + (b.review2 || 0) + (b.review3 || 0) + (b.bonusPoints || 0);
-            return scoreB - scoreA;
-          })[0];
-        
-        if (bestTarget) {
-          showToast(`🧠 Scanner Suggestion: ${bestTarget.teamName} (Highest score, no shield)`, "info");
-        } else {
-          showToast("Scanner found no viable targets.", "info");
-        }
-        return true;
-      }
-
-      case "SYSTEM_OVERRIDE": {
-        const expiresAt = Date.now() + 30 * 1000;
-        await updateDoc(doc(db, "teams", team.id), {
-          activeEffects: arrayUnion({
-            id: Math.random().toString(36).substring(2, 9),
-            effect: "override_freeze",
-            type: "UTILITY",
-            expiresAt,
-            isPending: false,
-            icon: "Settings",
-            sourceCardId: card.id,
-            sourceTeamId: team.id
-          })
-        });
-        showToast("⚙️ System Override (30s). Immunity to Freeze!", "success");
-        return true;
-      }
-
-      case "LOCK_BREAKER": {
-        if (!targetTeam) return false;
-        const filtered = (targetTeam.activeEffects || []).filter(e => e.effect !== "block");
-        if (filtered.length === (targetTeam.activeEffects || []).length) {
-          showToast(`Target ${targetTeam.teamName} has no shield to break.`, "info");
-          return false;
-        }
-        await updateDoc(doc(db, "teams", targetTeam.id), { activeEffects: filtered });
-        showToast(`💥 Shield Shattered for ${targetTeam.teamName}!`, "success");
-        return true;
-      }
-
-      case "CHAOS_SWITCH": {
-        if (teams.length < 2) return false;
-        const t1 = teams[Math.floor(Math.random() * teams.length)];
-        let t2 = teams[Math.floor(Math.random() * teams.length)];
-        while (t1.id === t2.id) t2 = teams[Math.floor(Math.random() * teams.length)];
-
-        const score1 = (t1.review1 || 0) + (t1.review2 || 0) + (t1.review3 || 0) + (t1.bonusPoints || 0);
-        const score2 = (t2.review1 || 0) + (t2.review2 || 0) + (t2.review3 || 0) + (t2.bonusPoints || 0);
-
-        const batch = writeBatch(db);
-        // We swap total scores by adjusting bonusPoints relative to their base reviews
-        const base1 = (t1.review1 || 0) + (t1.review2 || 0) + (t1.review3 || 0);
-        const base2 = (t2.review1 || 0) + (t2.review2 || 0) + (t2.review3 || 0);
-        
-        batch.update(doc(db, "teams", t1.id), { bonusPoints: score2 - base1 });
-        batch.update(doc(db, "teams", t2.id), { bonusPoints: score1 - base2 });
-        
-        await batch.commit();
-        showToast(`🌀 Chaos Switch! ${t1.teamName} and ${t2.teamName} swapped positions!`, "info");
-        return true;
-      }
-
-      case "REALITY_REWRITE": {
-        if (!targetTeam) return false;
-        const q = query(
-          collection(db, "activityLogs"),
-          where("teamName", "==", targetTeam.teamName),
-          orderBy("timestamp", "desc"),
-          limit(5)
-        );
-        const snapshot = await getDocs(q);
-        const logs = snapshot.docs.map(d => d.data());
-        const lastScoreLog = logs.find(l => l.actionType === "score" || (l.actionType === "card" && l.points && l.points !== 0));
-
-        if (!lastScoreLog) {
-          showToast("No recent score history found for reality rewrite", "info");
-          return false;
-        }
-
-        const delta = lastScoreLog.points || 0;
-        await updateDoc(doc(db, "teams", targetTeam.id), {
-          bonusPoints: (Number(targetTeam.bonusPoints) || 0) - delta
-        });
-        showToast(`⌛ Reality Rewritten. ${targetTeam.teamName} score reverted by ${-delta} pts.`, "success");
-        return true;
-      }
-
-      case "ABSOLUTE_VISION": {
-        const expiresAt = Date.now() + 10 * 1000;
-        await updateDoc(doc(db, "teams", team.id), {
-          activeEffects: arrayUnion({
-            id: Math.random().toString(36).substring(2, 9),
-            effect: "vision",
-            type: "UTILITY",
-            expiresAt,
-            isPending: false,
-            icon: "Eye",
-            sourceCardId: card.id,
-            sourceTeamId: team.id
-          })
-        });
-        showToast("👁️ Absolute Vision (10s). Seeing through the grid...", "success");
-        return true;
-      }
-
-      case "PREDICTIVE_ENGINE": {
-        showToast("🧠 Prediction: A global phenomenon is approaching...", "info");
-        return true;
-      }
-
-      default:
-        showToast("Utility logic not implemented yet", "info");
-        return false;
-    }
-  };
 
   const handleUseCard = async (
     teamId: string,
@@ -1364,8 +1158,7 @@ export default function ControlRoom() {
       cardInfo.type === "ATTACK" ||
       cardInfo.effect === "deduct_points" ||
       cardInfo.effect === "freeze" ||
-      cardInfo.effect === "mind_hack" ||
-      (cardInfo.effect === "utility" && ["REVEAL_PULSE", "LOCK_BREAKER", "REALITY_REWRITE"].includes(cardInfo.utilityType || ''));
+      cardInfo.effect === "mind_hack";
 
     if (requiresTarget) {
       targetTeamId = cardTargets[`${teamId}_${cardId}_${index}`];
@@ -1399,12 +1192,7 @@ export default function ControlRoom() {
     console.log("Applying card:", cardInfo);
     if (targetTeamId) console.log("Target:", targetTeamId);
 
-    // ROUTE TO UTILITY ENGINE
-    if (cardInfo.effect === "utility") {
-      const success = await applyUtilityCard(cardInfo, team, targetTeamId);
-      if (!success) return;
-      usedInstantly = true;
-    } else if (cardInfo.effect === "add_points") {
+    if (cardInfo.effect === "add_points") {
       if (cardInfo.durationType === "INSTANT" && cardInfo.value) {
         // Apply via draft internally
         const draft = {
@@ -1488,11 +1276,9 @@ export default function ControlRoom() {
           showToast(`Mind Hack blocked by ${targetTeamInstance.teamName}'s Shield!`, "info");
           usedInstantly = true; // Still consume the mind hack card
         } else {
-          // Execute Steal
-          const stealAmount = Math.min(cardInfo.value, targetTeamInstance.bonusPoints + (targetTeamInstance.review1 || 0) + (targetTeamInstance.review2 || 0) + (targetTeamInstance.review3 || 0));
-          // For simplicity and matching user request: calculate based on total score logic or just bonus points
-          // User said: "target.score". We use bonusPoints as the primary pool for cards.
-          const actualSteal = Math.min(cardInfo.value, Math.max(0, targetTeamInstance.bonusPoints));
+          // Execute Steal - tied to their TOTAL score, not just bonus points
+          const totalTargetScore = (targetTeamInstance.bonusPoints || 0) + (targetTeamInstance.review1 || 0) + (targetTeamInstance.review2 || 0) + (targetTeamInstance.review3 || 0);
+          const actualSteal = Math.min(cardInfo.value, Math.max(0, totalTargetScore));
           
           const batch = writeBatch(db);
           batch.update(doc(db, "teams", team.id), {
@@ -2597,20 +2383,9 @@ export default function ControlRoom() {
                                 } px-2 py-0.5 rounded text-[10px] text-white flex-1 transition-colors`}
                               >
                                 {c.icon}{" "}
-                                <div className="flex flex-col items-start min-w-0 flex-1">
+                                <div className="flex flex-col items-start min-w-0 flex-1 justify-center">
                                   <span className="font-bold whitespace-nowrap overflow-visible">
                                     {c.name}
-                                  </span>
-                                  <span className="text-[8px] text-zinc-400 font-medium leading-tight text-left">
-                                    {c.description || (() => {
-                                      if (c.effect === "add_points") return `+${c.value || 0} pts`;
-                                      if (c.effect === "deduct_points") return `${Math.abs(c.value || 0)} pts ded.`;
-                                      if (c.effect === "multiply_score") return `${c.value || 0}x Mult.`;
-                                      if (c.effect === "block") return "Shield Block";
-                                      if (c.effect === "freeze") return `Freeze (${c.durationValue || 0} mins)`;
-                                      if (c.effect === "utility") return c.utilityType?.replace(/_/g, " ");
-                                      return "";
-                                    })()}
                                   </span>
                                 </div>
                                 {isCoolingDown ? (
@@ -2811,9 +2586,6 @@ export default function ControlRoom() {
                   <option value="DEFENSE" className="text-blue-400">
                     Defense
                   </option>
-                  <option value="UTILITY" className="text-purple-400">
-                    Utility
-                  </option>
                 </select>
 
                 <select
@@ -2869,31 +2641,8 @@ export default function ControlRoom() {
                 <option value="global_freeze">Global Freeze</option>
                 <option value="mind_hack">Mind Hack (Steal)</option>
                 <option value="extend_time">Extend Time</option>
-                <option value="utility">Utility Logic</option>
               </select>
 
-              {newCard.effect === "utility" && (
-                <select
-                  value={newCard.utilityType || "DATA_PING"}
-                  onChange={(e) =>
-                    setNewCard({ ...newCard, utilityType: e.target.value as any })
-                  }
-                  className="flex-1 min-w-[140px] bg-purple-900 border border-purple-500/50 rounded-lg px-2 py-2 uppercase tracking-widest text-[10px] items-center font-black text-white hover:bg-purple-800 transition-colors"
-                >
-                  <option value="DATA_PING" className="bg-zinc-950 text-white">Data Ping</option>
-                  <option value="PRECISION_LOCK" className="bg-zinc-950 text-white">Precision Lock</option>
-                  <option value="ENERGY_REFRESH" className="bg-zinc-950 text-white">Energy Refresh</option>
-                  <option value="REVEAL_PULSE" className="bg-zinc-950 text-white">Reveal Pulse</option>
-                  <option value="COOLDOWN_RESET" className="bg-zinc-950 text-white">Cooldown Reset</option>
-                  <option value="TARGET_SCANNER" className="bg-zinc-950 text-white">Target Scanner</option>
-                  <option value="SYSTEM_OVERRIDE" className="bg-zinc-950 text-white">System Override</option>
-                  <option value="LOCK_BREAKER" className="bg-zinc-950 text-white">Lock Breaker</option>
-                  <option value="PREDICTIVE_ENGINE" className="bg-zinc-950 text-white">Predictive Engine</option>
-                  <option value="CHAOS_SWITCH" className="bg-zinc-950 text-white">Chaos Switch</option>
-                  <option value="REALITY_REWRITE" className="bg-zinc-950 text-white">Reality Rewrite</option>
-                  <option value="ABSOLUTE_VISION" className="bg-zinc-950 text-white">Absolute Vision</option>
-                </select>
-              )}
 
               <input
                 type="number"
@@ -3022,20 +2771,6 @@ export default function ControlRoom() {
                         rarity === "LEGENDARY"
                           ? "text-blue-400 border-blue-500/30 bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.4)]"
                           : "text-blue-400 border-blue-500/30 bg-blue-500/10",
-                    };
-                  if (type === "UTILITY")
-                    return {
-                      border:
-                        rarity === "LEGENDARY"
-                          ? "border-purple-500/60 shadow-[0_0_25px_rgba(168,85,247,0.15)] bg-gradient-to-br from-zinc-900 via-zinc-900 to-purple-900/20 animate-[pulse_6s_ease-in-out_infinite_alternate] overflow-hidden"
-                          : rarity === "RARE"
-                          ? "border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.1)] bg-gradient-to-br from-zinc-900 to-purple-900/10"
-                          : "border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.05)]",
-                      glow: "bg-purple-500",
-                      text:
-                        rarity === "LEGENDARY"
-                          ? "text-purple-400 border-purple-500/30 bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
-                          : "text-purple-400 border-purple-500/30 bg-purple-500/10",
                     };
                   return {
                     border:
@@ -3177,7 +2912,6 @@ export default function ControlRoom() {
                   if (c.effect === "freeze") return `Freeze Effect: Stops target for ${c.durationValue || 0} mins`;
                   if (c.effect === "global_freeze") return `GLOBAL LOCKOUT: All teams frozen (${c.durationValue || 0} mins)`;
                   if (c.effect === "mind_hack") return `Mind Hack: Steal ${c.value || 0} points from target`;
-                  if (c.effect === "utility") return `Logic: ${c.utilityType?.replace(/_/g, " ")}`;
                   return "";
                 })();
 
@@ -3189,8 +2923,6 @@ export default function ControlRoom() {
                         ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.02)]"
                         : c.type === "DEFENSE"
                         ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.02)]"
-                        : c.type === "UTILITY"
-                        ? "bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40 hover:bg-purple-500/10 shadow-[0_0_10px_rgba(168,85,247,0.02)]"
                         : "bg-[#39ff14]/5 border-[#39ff14]/20 hover:border-[#39ff14]/40 hover:bg-[#39ff14]/10 shadow-[0_0_10px_rgba(57,255,20,0.02)]"
                     }`}
                   >
@@ -3198,7 +2930,6 @@ export default function ControlRoom() {
                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shrink-0 transition-transform group-hover:scale-110 mt-1 ${
                          c.type === "ATTACK" ? "bg-red-500/10 border-red-500/30 text-red-400" :
                          c.type === "DEFENSE" ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
-                         c.type === "UTILITY" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" :
                          "bg-[#39ff14]/10 border-[#39ff14]/30 text-[#39ff14]"
                       }`}>
                         <span className="text-2xl drop-shadow-[0_0_8px_currentColor]">{c.icon || "✨"}</span>
@@ -3215,8 +2946,6 @@ export default function ControlRoom() {
                                 ? "text-red-400 border-red-500/30 bg-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
                                 : c.type === "DEFENSE"
                                 ? "text-blue-400 border-blue-500/30 bg-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.2)]"
-                                : c.type === "UTILITY"
-                                ? "text-purple-400 border-purple-500/30 bg-purple-500/20 shadow-[0_0_8px_rgba(168,85,247,0.2)]"
                                 : "text-[#39ff14] border-[#39ff14]/30 bg-[#39ff14]/20 shadow-[0_0_8px_rgba(57,255,20,0.2)]"
                             }`}
                           >
@@ -3232,7 +2961,6 @@ export default function ControlRoom() {
                         <span className={`text-[9px] font-mono font-black mt-2 uppercase opacity-40 ${
                            c.type === "ATTACK" ? "text-red-300" :
                            c.type === "DEFENSE" ? "text-blue-300" :
-                           c.type === "UTILITY" ? "text-purple-300" :
                            "text-[#39ff14]"
                         }`}>
                           Effect: {c.effect?.replace(/_/g, " ")} ({c.value || 0})

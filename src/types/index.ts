@@ -36,25 +36,12 @@ export interface ActivityLog {
   timestamp: number;
 }
 
-export type UtilityType =
-  | "DATA_PING"
-  | "PRECISION_LOCK"
-  | "ENERGY_REFRESH"
-  | "REVEAL_PULSE"
-  | "COOLDOWN_RESET"
-  | "TARGET_SCANNER"
-  | "SYSTEM_OVERRIDE"
-  | "LOCK_BREAKER"
-  | "PREDICTIVE_ENGINE"
-  | "CHAOS_SWITCH"
-  | "REALITY_REWRITE"
-  | "ABSOLUTE_VISION";
 
 export interface Card {
   id: string;
   name: string;
   rarity: "COMMON" | "RARE" | "LEGENDARY";
-  type: "BOOST" | "ATTACK" | "DEFENSE" | "UTILITY" | string;
+  type: "BOOST" | "ATTACK" | "DEFENSE" | string;
   description: string;
   effect:
     | "add_points"
@@ -63,11 +50,9 @@ export interface Card {
     | "block"
     | "freeze"
     | "extend_time"
-    | "utility"
     | "mind_hack"
     | "global_freeze"
     | string;
-  utilityType?: UtilityType;
   value: number | null;
   durationType: "INSTANT" | "NEXT_ACTION" | "TIMED" | string;
   durationValue: number | null;
