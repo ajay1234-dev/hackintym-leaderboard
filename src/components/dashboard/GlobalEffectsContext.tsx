@@ -188,7 +188,18 @@ export const GlobalEffectsProvider = ({ children }: { children: ReactNode }) => 
             </div>
             <div className="text-[11px] text-zinc-300 mt-2 leading-tight">{tooltip.description}</div>
             <div className={`text-[10px] font-mono font-bold mt-2 p-1.5 rounded inline-block w-full border ${tooltip.type === 'RARE' ? 'text-purple-400 bg-purple-500/10 border-purple-500/20' : tooltip.type === 'LEGENDARY' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'}`}>
-              {tooltip.effect}
+              <span className="opacity-70 mr-1">POWER:</span> {
+                tooltip.effect === 'add_points' ? 'INSTANT POINTS' :
+                tooltip.effect === 'subtract_points' ? 'DEDUCT POINTS' :
+                tooltip.effect === 'multiply_score' ? 'SCORE MULTIPLIER' :
+                tooltip.effect === 'block' ? 'DEFENSIVE SHIELD' :
+                tooltip.effect === 'freeze' ? 'SYSTEM FREEZE' :
+                tooltip.effect === 'precision_lock' ? 'PRECISION LOCK' :
+                tooltip.effect === 'vision' ? 'VISION MODE' :
+                tooltip.effect === 'override_freeze' ? 'FREEZE OVERRIDE' :
+                tooltip.effect === 'predictive_engine' ? 'PREDICTIVE ENGINE' :
+                tooltip.effect.replace(/_/g, ' ').toUpperCase()
+              }
             </div>
           </motion.div>
         )}
