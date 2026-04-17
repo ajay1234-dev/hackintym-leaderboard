@@ -7,7 +7,7 @@ import { ActivityLog, Card } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Clock, ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { useGlobalEffects } from './GlobalEffectsContext';
-import { playActivitySound, playBountySound, playInjectionSound, playCardActivateSound } from '@/lib/soundManager';
+import { playActivitySound, playBountySound, playInjectionSound, playCardActivateSound, playScoreSound } from '@/lib/soundManager';
 
 export default function TopActivityBar() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -34,7 +34,10 @@ export default function TopActivityBar() {
 
             // Audio Routing
             const rawMsg = topLog.message || topLog.action || '';
-            if (topLog.actionType === 'bounty' || rawMsg.includes('Bounty')) {
+            const isCompletedBounty = rawMsg.toLowerCase().includes('completed') && rawMsg.toLowerCase().includes('bounty');
+            if (isCompletedBounty) {
+               playScoreSound();
+            } else if (topLog.actionType === 'bounty' || rawMsg.includes('Bounty')) {
                playBountySound();
             } else if (topLog.actionType === 'injection' || rawMsg.includes('Injection')) {
                playInjectionSound();
