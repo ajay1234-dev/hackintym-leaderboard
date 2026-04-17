@@ -196,6 +196,18 @@ export default function CardsLibrary() {
                   /^[a-zA-Z]+$/.test(card.icon || "");
                 const renderEmoji = isLegacyString ? "✨" : card.icon || "✨";
 
+                const autoPower = (() => {
+                  if (card.effect === "add_points") return `+${card.value || 0} pts`;
+                  if (card.effect === "deduct_points") return `-${Math.abs(card.value || 0)} pts`;
+                  if (card.effect === "multiply_score") return `${card.value || 2}x Mult`;
+                  if (card.effect === "block") return "Shield";
+                  if (card.effect === "freeze") return `Freeze ${card.durationValue || 0}m`;
+                  if (card.effect === "global_freeze") return `Global Freeze ${card.durationValue || 0}m`;
+                  if (card.effect === "mind_hack") return `Steal ${card.value || 0} pts`;
+                  if (card.effect === "extend_time") return `+${card.value || 0}m Time`;
+                  return card.effect;
+                })();
+
                 return (
                   <motion.div
                     layout
@@ -203,7 +215,7 @@ export default function CardsLibrary() {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3, delay: i * 0.05 }}
                     key={card.id}
-                    className={`w-full min-h-[460px] flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default overflow-hidden ${borderClass} ${cardGlowEffect}`}
+                    className={`w-full flex flex-col justify-between glass-panel p-5 sm:p-6 rounded-3xl border relative group hover:-translate-y-2 hover:rotate-[1deg] transition-all duration-300 cursor-default overflow-hidden ${borderClass} ${cardGlowEffect}`}
                   >
                     {/* Background Glow */}
                     <div
@@ -216,7 +228,7 @@ export default function CardsLibrary() {
                     )}
 
                     <div className="flex flex-col h-full relative z-10 w-full">
-                      <div className="flex items-start justify-between mb-4 sm:mb-6 shrink-0">
+                      <div className="flex items-start justify-between mb-4 sm:mb-6 shrink-0 gap-3">
                         <div
                           className={`w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-110 transition-transform duration-300 shrink-0 flex items-start justify-start ${
                             textClass.split(" ")[0]
@@ -230,11 +242,18 @@ export default function CardsLibrary() {
                             </span>
                           )}
                         </div>
-                        <span
-                          className={`text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded border shadow-sm shrink-0 whitespace-nowrap ${textClass}`}
-                        >
-                          {card.type}
-                        </span>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span
+                            className={`text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded border shadow-sm whitespace-nowrap ${textClass}`}
+                          >
+                            {card.type}
+                          </span>
+                          <span
+                            className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/20 bg-white/5 whitespace-nowrap text-white/90 shadow-[0_0_10px_rgba(255,255,255,0.05)]`}
+                          >
+                            {autoPower}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex-1 flex flex-col">
@@ -244,26 +263,6 @@ export default function CardsLibrary() {
                         <p className="text-xs sm:text-sm text-zinc-400 mb-6 leading-relaxed font-medium break-words px-1">
                           {card.description}
                         </p>
-                      </div>
-
-                      <div className="pt-4 border-t border-zinc-800 shrink-0 mt-auto">
-                        <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 font-bold">
-                          Logic Sequence
-                        </div>
-                        <div
-                          className={`text-[11px] sm:text-xs font-mono font-black tracking-wider px-2.5 sm:px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 w-full ${
-                            textClass.split(" ")[0]
-                          }`}
-                        >
-                          {(() => {
-                            if (card.effect === "add_points") return `+${card.value || 0} Points`;
-                            if (card.effect === "deduct_points") return `${Math.abs(card.value || 0)} Pts Deduction`;
-                            if (card.effect === "multiply_score") return `${card.value || 0}x Multiplier`;
-                            if (card.effect === "block") return "Defense: Shield Block";
-                            if (card.effect === "freeze") return `Effect: Freeze (${card.durationValue || 0} mins)`;
-                            return card.effect;
-                          })()}
-                        </div>
                       </div>
                     </div>
                   </motion.div>
