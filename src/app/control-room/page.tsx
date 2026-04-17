@@ -660,10 +660,20 @@ export default function ControlRoom() {
         } // end for stagedInjections
       } // end if globalEndTime
 
-      // Clean expired team effects
+      // Clean expired team effects and protection
       for (const team of teams) {
+        let hasUpdates = false;
+        const updates: any = {};
+        const currentTimeMs = Date.now();
+
+        if (team.isProtected && team.protectionEndsAt && team.protectionEndsAt <= currentTimeMs) {
+          updates.isProtected = false;
+          updates.protectionEndsAt = null;
+          updates.lastAttacks = [];
+          hasUpdates = true;
+        }
+
         if (team.activeEffects && team.activeEffects.length > 0) {
-          const currentTimeMs = Date.now();
           const validEffects = team.activeEffects.filter(
             (e) => !e.expiresAt || e.expiresAt > currentTimeMs
           );
@@ -672,10 +682,9 @@ export default function ControlRoom() {
           );
 
           if (expiredEffects.length > 0) {
+            updates.activeEffects = validEffects;
+            hasUpdates = true;
             try {
-              // Move source cards to used along with the cleaning
-              const updates: any = { activeEffects: validEffects };
-
               for (const e of expiredEffects as any[]) {
                 if (e.sourceCardId) {
                   const sourceTid = e.sourceTeamId || team.id;
@@ -690,10 +699,17 @@ export default function ControlRoom() {
                   }
                 }
               }
-              await updateDoc(doc(db, "teams", team.id), updates);
             } catch (err) {
-              console.error("Failed auto-clean team effects:", err);
+              console.error("Failed auto-clean team effects sub-logic:", err);
             }
+          }
+        }
+
+        if (hasUpdates) {
+          try {
+            await updateDoc(doc(db, "teams", team.id), updates);
+          } catch (err) {
+            console.error("Failed auto-clean team updates:", err);
           }
         }
       }
@@ -1190,6 +1206,20 @@ export default function ControlRoom() {
       ? teams.find((t) => t.id === targetTeamId)
       : null;
     let usedInstantly = false;
+    let attackSuccessful = false;
+
+    // Smart Target Protection Check
+    const isTargetedAttack = requiresTarget && targetTeamInstance;
+    if (isTargetedAttack) {
+      if (
+        targetTeamInstance?.isProtected &&
+        targetTeamInstance.protectionEndsAt &&
+        targetTeamInstance.protectionEndsAt > Date.now()
+      ) {
+        showToast("Target under protection! Attack blocked.", "info");
+        return;
+      }
+    }
 
     console.log("Applying card:", cardInfo);
     if (targetTeamId) console.log("Target:", targetTeamId);
@@ -1238,6 +1268,7 @@ export default function ControlRoom() {
           showToast(
             `${targetTeamInstance.teamName} lost ${cardInfo.value} points`
           );
+          attackSuccessful = true;
         } else {
           showToast(
             `Attack deflected from ${
@@ -1293,6 +1324,7 @@ export default function ControlRoom() {
           await batch.commit();
           showToast(`Mind Hack Successful! Stole ${actualSteal} points from ${targetTeamInstance.teamName}`, "success");
           usedInstantly = true;
+          attackSuccessful = true;
         }
       }
     } else if (cardInfo.effect === "global_freeze") {
@@ -1321,6 +1353,9 @@ export default function ControlRoom() {
       const batch = writeBatch(db);
       teams.forEach(t => {
         if (t.id !== team.id) {
+          if (t.isProtected && t.protectionEndsAt && t.protectionEndsAt > Date.now()) {
+            return; // Skip protected teams
+          }
           batch.update(doc(db, "teams", t.id), {
             activeEffects: arrayUnion(globalEffect)
           });
@@ -1391,6 +1426,7 @@ export default function ControlRoom() {
       if (cardInfo.effect === "freeze" && targetTeamInstance) {
         targetTeamUpdates = { activeEffects: arrayUnion(newEffect) };
         usedInstantly = true; // The executing team used their card instantly, target gets the effect!
+        attackSuccessful = true;
       } else {
         executingTeamUpdates.activeEffects = arrayUnion(newEffect);
         usedInstantly = true; // Consumed instantly to activate the effect
@@ -1405,6 +1441,23 @@ export default function ControlRoom() {
     if (usedInstantly) {
       executingTeamUpdates.cardsOwned = arrayRemove(cardId);
       executingTeamUpdates.cardsUsed = arrayUnion(cardId);
+    }
+
+    if (attackSuccessful && targetTeamId && targetTeamInstance) {
+      const now = Date.now();
+      const validLastAttacks = (targetTeamInstance.lastAttacks || []).filter(
+        (t) => now - t < 180000
+      );
+      validLastAttacks.push(now);
+
+      targetTeamUpdates = targetTeamUpdates || {};
+      targetTeamUpdates.lastAttacks = validLastAttacks;
+      
+      if (validLastAttacks.length >= 2) {
+        targetTeamUpdates.isProtected = true;
+        targetTeamUpdates.protectionEndsAt = now + 240000;
+        showToast(`🛡️ ${targetTeamInstance.teamName} is now PROTECTED!`, "info");
+      }
     }
 
     try {

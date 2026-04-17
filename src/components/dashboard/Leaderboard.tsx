@@ -170,6 +170,41 @@ const CooldownBadge = ({ cooldownMs }: { cooldownMs: number }) => {
   );
 };
 
+const ProtectionBadge = ({ protectionEndsAt }: { protectionEndsAt: number }) => {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+
+  useEffect(() => {
+    if (!protectionEndsAt) return;
+    const updateTime = () => {
+      setTimeLeft(Math.max(0, Math.ceil((protectionEndsAt - Date.now()) / 1000)));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, [protectionEndsAt]);
+
+  if (timeLeft === 0) return null;
+
+  const formatTime = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const splitSecs = secs % 60;
+    return `${mins.toString().padStart(2, "0")}:${splitSecs
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border bg-[rgba(16,185,129,0.1)] border-emerald-500/50 text-emerald-400 cursor-default select-none group relative shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+      <span className="text-[10px] drop-shadow-sm pointer-events-none select-none">
+        🛡️
+      </span>
+      <span className="text-[10px] font-bold tracking-wide">
+        PROTECTED ({formatTime(timeLeft)})
+      </span>
+    </div>
+  );
+};
+
 export type RevealPhase =
   | "IDLE"
   | "COUNTDOWN"
@@ -341,9 +376,12 @@ function LeaderboardRow({
 
   const isFrozen = team.activeEffects?.some((e) => e.effect === "freeze");
   const isShielded = team.activeEffects?.some((e) => e.effect === "block");
+  const isProtected = team.isProtected && team.protectionEndsAt && team.protectionEndsAt > Date.now();
 
   const glowClass = isFrozen
     ? "bg-[rgba(239,68,68,0.2)] border-red-500/50 shadow-[inset_0_0_20px_rgba(239,68,68,0.3)]"
+    : isProtected
+    ? "bg-[rgba(16,185,129,0.15)] border-emerald-500/50 shadow-[inset_0_0_20px_rgba(16,185,129,0.3)]"
     : isShielded
     ? "bg-[rgba(59,130,246,0.2)] border-blue-500/50 shadow-[inset_0_0_20px_rgba(59,130,246,0.3)]"
     : revealPhase === "POST_REVEAL" && index < 3
@@ -491,6 +529,9 @@ function LeaderboardRow({
       {/* Active Effects (New Feature) */}
       <div className="col-span-2 sm:col-span-4 md:col-span-4 flex flex-wrap items-center gap-1 sm:gap-1.5 text-left border-l border-zinc-800/50 pl-2">
         <AnimatePresence>
+          {team.isProtected && team.protectionEndsAt && team.protectionEndsAt > Date.now() && (
+            <ProtectionBadge protectionEndsAt={team.protectionEndsAt} />
+          )}
           {(team.activeEffects || []).map((effect) => (
             <ActiveEffectBadge
               key={effect.id}
@@ -608,6 +649,9 @@ export default function Leaderboard() {
             cardsUsed: data.cardsUsed || [],
             activeEffects: data.activeEffects || [],
             cardCooldowns: data.cardCooldowns || {},
+            lastAttacks: data.lastAttacks || [],
+            isProtected: data.isProtected || false,
+            protectionEndsAt: data.protectionEndsAt || null,
             totalScore: review1 + review2 + review3 + bonusPoints,
           } as TeamWithScore;
         });

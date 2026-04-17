@@ -24,6 +24,9 @@ export interface Team {
   cardsUsed?: string[];
   activeEffects?: ActiveEffect[];
   cardCooldowns?: Record<string, number>;
+  lastAttacks?: number[];
+  isProtected?: boolean;
+  protectionEndsAt?: number | null;
 }
 
 export interface ActivityLog {
