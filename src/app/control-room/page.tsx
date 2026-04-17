@@ -1320,9 +1320,11 @@ export default function ControlRoom() {
 
       const batch = writeBatch(db);
       teams.forEach(t => {
-        batch.update(doc(db, "teams", t.id), {
-          activeEffects: arrayUnion(globalEffect)
-        });
+        if (t.id !== team.id) {
+          batch.update(doc(db, "teams", t.id), {
+            activeEffects: arrayUnion(globalEffect)
+          });
+        }
       });
       
       await batch.commit();
