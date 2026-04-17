@@ -3318,7 +3318,7 @@ export default function ControlRoom() {
                 if (c.effect === "add_points") return `+${c.value || 0} pts`;
                 if (c.effect === "deduct_points") return `-${Math.abs(c.value || 0)} pts`;
                 if (c.effect === "multiply_score") return `${c.value || 2}x Mult`;
-                if (c.effect === "block") return "Shield";
+                if (c.effect === "block") return c.durationValue ? `Shield ${c.durationValue}m` : "Shield";
                 if (c.effect === "freeze") return `Freeze ${c.durationValue || 0}m`;
                 if (c.effect === "global_freeze") return `Global Freeze ${c.durationValue || 0}m`;
                 if (c.effect === "mind_hack") return `Steal ${c.value || 0} pts`;

@@ -200,7 +200,7 @@ export default function CardsLibrary() {
                   if (card.effect === "add_points") return `+${card.value || 0} pts`;
                   if (card.effect === "deduct_points") return `-${Math.abs(card.value || 0)} pts`;
                   if (card.effect === "multiply_score") return `${card.value || 2}x Mult`;
-                  if (card.effect === "block") return "Shield";
+                  if (card.effect === "block") return card.durationValue ? `Shield ${card.durationValue}m` : "Shield";
                   if (card.effect === "freeze") return `Freeze ${card.durationValue || 0}m`;
                   if (card.effect === "global_freeze") return `Global Freeze ${card.durationValue || 0}m`;
                   if (card.effect === "mind_hack") return `Steal ${card.value || 0} pts`;
