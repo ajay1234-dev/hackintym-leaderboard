@@ -1455,7 +1455,7 @@ export default function ControlRoom() {
       
       if (validLastAttacks.length >= 2) {
         targetTeamUpdates.isProtected = true;
-        targetTeamUpdates.protectionEndsAt = now + 240000;
+        targetTeamUpdates.protectionEndsAt = now + 1800000; // 30 minutes
         showToast(`🛡️ ${targetTeamInstance.teamName} is now PROTECTED!`, "info");
       }
     }
