@@ -408,7 +408,7 @@ function LeaderboardRow({
           repeatType: "reverse",
         },
       }}
-      className={`grid grid-cols-12 md:grid-cols-16 gap-1 md:gap-2 items-center p-2 md:p-3 rounded-xl border transition-all duration-300 relative ${glowClass} hover:bg-zinc-800/40 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] min-h-[72px] max-h-[72px] md:min-h-[80px] md:max-h-[80px] ${isFrozen ? 'filter blur-[2px] opacity-60 grayscale-[50%] pointer-events-none' : ''}`}
+      className={`grid grid-cols-12 md:grid-cols-16 gap-1 md:gap-2 items-center p-2 md:p-3 rounded-xl border transition-all duration-300 relative ${glowClass} hover:bg-zinc-800/40 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] min-h-[72px] max-h-[72px] md:min-h-[80px] md:max-h-[80px] ${isFrozen ? 'opacity-50 grayscale-[80%] pointer-events-none' : ''}`}
     >
       {/* Absolute floating text has been offloaded to GlobalEffectsLayer */}
 
