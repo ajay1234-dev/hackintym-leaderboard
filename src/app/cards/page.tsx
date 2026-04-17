@@ -242,14 +242,16 @@ export default function CardsLibrary() {
                             </span>
                           )}
                         </div>
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <div className="flex flex-col items-end gap-1.5 shrink min-w-0 max-w-[65%]">
                           <span
-                            className={`text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded border shadow-sm whitespace-nowrap ${textClass}`}
+                            className={`text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 sm:px-2.5 sm:py-1.5 rounded border shadow-sm truncate max-w-full inline-block ${textClass}`}
+                            title={card.type}
                           >
                             {card.type}
                           </span>
                           <span
-                            className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/20 bg-white/5 whitespace-nowrap text-white/90 shadow-[0_0_10px_rgba(255,255,255,0.05)]`}
+                            className={`text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/20 bg-white/5 text-white/90 shadow-[0_0_10px_rgba(255,255,255,0.05)] truncate max-w-full inline-block`}
+                            title={autoPower}
                           >
                             {autoPower}
                           </span>
