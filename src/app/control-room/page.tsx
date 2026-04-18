@@ -220,7 +220,8 @@ export default function ControlRoom() {
         submission.teamId,
         submission.teamName,
         submission.cardId,
-        0 // index doesn't matter for execution
+        0, // index doesn't matter for execution
+        submission.targetTeamId
       );
 
       // Delete the pending submission
@@ -330,19 +331,8 @@ export default function ControlRoom() {
     }
 
     try {
-      // Set the target in cardTargets so handleUseCard can pick it up for ATTACK cards
-      if (targetTeam) {
-        setCardTargets((prev) => ({
-          ...prev,
-          [`${team.id}_${card.id}_0`]: targetTeam.id,
-        }));
-      }
-
-      // Short delay to ensure state update propagates
-      await new Promise((r) => setTimeout(r, 50));
-
-      // Execute the card effect using existing logic
-      await handleUseCard(team.id, team.teamName, card.id, 0);
+      // Execute the card effect directly, passing the target team ID
+      await handleUseCard(team.id, team.teamName, card.id, 0, targetTeam?.id);
 
       // Mark request as approved
       await approveRequest(request.id);
@@ -1165,20 +1155,21 @@ export default function ControlRoom() {
     teamId: string,
     teamName: string,
     cardId: string,
-    index: number
+    index: number,
+    providedTargetId?: string
   ) => {
     if (isLocked) return;
     const cardInfo = cards.find((c) => c.id === cardId);
     if (!cardInfo) return;
 
-    let targetTeamId: string | undefined = undefined;
+    let targetTeamId: string | undefined = providedTargetId;
     const requiresTarget =
       cardInfo.type === "ATTACK" ||
       cardInfo.effect === "deduct_points" ||
       cardInfo.effect === "freeze" ||
       cardInfo.effect === "mind_hack";
 
-    if (requiresTarget) {
+    if (requiresTarget && !targetTeamId) {
       targetTeamId = cardTargets[`${teamId}_${cardId}_${index}`];
       if (!targetTeamId) {
         showToast("Please select a target team first!", "info");
